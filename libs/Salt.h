@@ -24,7 +24,7 @@ class Salt {
 
  public:
   Salt(const std::size_t size) : m_stringLength{size} {
-    m_charLength = std::size(m_alphanum);
+    m_charLength = std::size(m_alphanum) - 1;
   }
 
   std::string operator()() {
@@ -36,7 +36,7 @@ class Salt {
       // although it goes against convention, instantiating
       // the distribution inside of thr loop speeds
       // up the algorithm by almost 1/3 us
-      std::uniform_int_distribution<int> dist(0, m_charLength);
+      std::uniform_int_distribution<int> dist(0, m_charLength - 1);
       salt.push_back(m_alphanum[dist(mt)]);
     }
 
