@@ -1,6 +1,6 @@
 # Compiler and Base Flags
 CXX        := g++
-BASE_FLAGS := -std=c++23 -Wall -Wextra -pthread -Iinclude -Ilibs
+BASE_FLAGS := -std=c++23 -Wall -Wextra -pthread -Iinclude -Ilibs	-Iexternal
 LDFLAGS    := -lcurl -lcryptopp -lgtest -lgtest_main -pthread
 
 # Debug Toggle (Default: Off/Release mode)
