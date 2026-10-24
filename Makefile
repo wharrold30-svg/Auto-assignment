@@ -1,6 +1,6 @@
 # Compiler and Base Flags
 CXX        := g++
-BASE_FLAGS := -std=c++23 -Wall -Wextra -pthread -Iinclude -Ilibs	-Iexternal
+BASE_FLAGS := -std=c++23 -Wall -Wextra -pthread -Iinclude -Ilibs	-Iexternal/include
 LDFLAGS    := -lcurl -lcryptopp -lgtest -lgtest_main -pthread
 
 # Debug Toggle (Default: Off/Release mode)
@@ -28,8 +28,13 @@ OBJS      := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
 TARGET    := $(BUILD_DIR)/app
 
 # Test Files & Infrastructure
-COMMON_SRCS      := Connection.cpp Date.cpp Email.cpp
-COMMON_SRC_PATHS := $(addprefix $(LIB_DIR)/, $(COMMON_SRCS))
+LIB_COMMON_SRCS  := Connection.cpp Date.cpp Email.cpp
+LIB_COMMON_PATHS := $(addprefix $(LIB_DIR)/, $(LIB_COMMON_SRCS))
+
+SRC_COMMON_SRCS  := StudentSingleton.cpp
+SRC_COMMON_PATHS := $(addprefix $(SRC_DIR)/, $(SRC_COMMON_SRCS))
+
+COMMON_SRC_PATHS := $(LIB_COMMON_PATHS) $(SRC_COMMON_PATHS)
 
 TEST_SRCS        := $(wildcard $(TEST_DIR)/*_test.cpp)
 TEST_EXECUTABLES := $(patsubst $(TEST_DIR)/%_test.cpp, $(BUILD_DIR)/%_test, $(TEST_SRCS))

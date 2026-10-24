@@ -15,7 +15,7 @@ class StudentSingleton {
   std::set<Student> m_students;
 
   void load();
-  void load();
+  void save();
 
   StudentSingleton();
   ~StudentSingleton();
@@ -35,17 +35,16 @@ class StudentSingleton {
   //[] used to get all the studentsbin a class
   // period, throws out_of_rang exception if not students are in that class
   // period
-  const std::vector<std::unique_ptr<Student>> operator[](
-      const std::size_t period) const;
-  std::vector<std::unique_ptr<Student>> operator[](const std::size_t period);
-  const Student& find(const Student& student) const;
-  Student& find(const Student&);
+  const std::vector<const Student*> operator[](const std::size_t period) const;
+  std::vector<Student*> operator[](const std::size_t period);
+  std::optional<const Student*> find(const Student& student) const;
+  std::optional<Student*> find(const Student&);
 
-  Students(const Students&) = delete;
-  Students& operator=(const Students&) = delete;
+  StudentSingleton(const StudentSingleton&) = delete;
+  Student& operator=(const Student&) = delete;
 
-  Students(Students&&) = delete;
-  Students& operator=(const Students&&) = delete;
+  StudentSingleton(StudentSingleton&&) = delete;
+  StudentSingleton& operator=(const StudentSingleton&&) = delete;
 
 };  // StudentSingleton
 std::size_t maxNameLength(const std::set<Student>& students);
