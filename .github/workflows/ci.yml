@@ -1,0 +1,35 @@
+name: C++23 Automated CI
+
+on:
+  push:
+    branches: [ main, master, dev ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Pull down your source code repository
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # 2. Set up a Docker build environment
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    # 3. Build the environment container using your Dockerfile
+    - name: Build Environment Container
+      run: docker build -t cpp23-env .
+
+    # 4. Run the main application compilation inside the container
+    - name: Compile Application (Release Mode)
+      run: |
+        docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env make all DEBUG=0
+
+    # 5. Run your Google Test suites inside the container
+    - name: Run All Google Test Suites (Debug Mode)
+      run: |
+        docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env make run_all DEBUG=1
+
