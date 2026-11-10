@@ -23,13 +23,13 @@ jobs:
     - name: Build Environment Container
       run: docker build -t cpp23-env .
 
-    # 4. Run the main application compilation inside the container
+    # 4. FIXED: Wipes out stale .o artifacts, then compiles the main application safely
     - name: Compile Application (Release Mode)
       run: |
-        docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env make all DEBUG=0
+        docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env bash -c "make clean && make all DEBUG=0"
 
-    # 5. Run your Google Test suites inside the container
+    # 5. FIXED: Wipes out stale binaries, then runs your Google Test suites incrementally
     - name: Run All Google Test Suites (Debug Mode)
       run: |
-        docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env make run_all DEBUG=1
+        docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env bash -c "make clean && make run_all DEBUG=1"
 
