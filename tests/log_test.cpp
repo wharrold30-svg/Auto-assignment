@@ -54,8 +54,6 @@ TEST_F(LogTest, BaseLogWritesCorrectly) {
   std::string line;
   std::getline(inFile, line);
 
-  // The log format is: "Date | message"
-  // We check if the message is contained in the written line
   EXPECT_NE(line.find(testMessage), std::string::npos)
       << "[FAILED] Log message not found in file content.";
   std::cout << "[PASSED] Base Log message successfully written and verified.\n";
@@ -69,9 +67,8 @@ TEST_F(LogTest, ConnectionErrorLogCreatesAndWrites) {
   std::string expectedPath = "log/error/connection.log";
   std::string testMessage = "Database socket timeout detected.";
 
-  {
-    Connection::ConnectionErrorLog connLog(testMessage);
-  }
+  // Call the global functor directly
+  Connection::ConnectionErrorLog(testMessage);
 
   ASSERT_TRUE(std::filesystem::exists(expectedPath))
       << "[FAILED] Connection error log file not created at " << expectedPath;
@@ -94,9 +91,8 @@ TEST_F(LogTest, EmailErrorLogCreatesAndWrites) {
   std::string expectedPath = "log/error/email.log";
   std::string testMessage = "SMTP authentication failed.";
 
-  {
-    Email::EmailErrorLog emailLog(testMessage);
-  }
+  // Call the global functor directly
+  Email::EmailErrorLog(testMessage);
 
   ASSERT_TRUE(std::filesystem::exists(expectedPath))
       << "[FAILED] Email error log file not created at " << expectedPath;
@@ -119,9 +115,8 @@ TEST_F(LogTest, DatabaseErrorLogCreatesAndWrites) {
   std::string expectedPath = "log/error/database.log";
   std::string testMessage = "Query execution timeout.";
 
-  {
-    Database::DatabaseErrorLog dbLog(testMessage);
-  }
+  // Call the global functor directly
+  Database::DatabaseErrorLog(testMessage);
 
   ASSERT_TRUE(std::filesystem::exists(expectedPath))
       << "[FAILED] Database error log file not created at " << expectedPath;
@@ -134,6 +129,50 @@ TEST_F(LogTest, DatabaseErrorLogCreatesAndWrites) {
   EXPECT_NE(line.find(testMessage), std::string::npos)
       << "[FAILED] Database error message missing.";
   std::cout << "[PASSED] Database error message verified successfully.\n";
+}
+
+// 5. Testing AA::SaveErrorLog (Writes to database.log per Log.h definition)
+TEST_F(LogTest, SaveErrorLogCreatesAndWrites) {
+  std::cout << "[TESTING] Part: AA::SaveErrorLog default path and logging...\n";
+
+  std::string expectedPath = "log/error/database.log";
+  std::string testMessage = "Failed to save game state.";
+
+  AA::SaveErrorLog(testMessage);
+
+  ASSERT_TRUE(std::filesystem::exists(expectedPath))
+      << "[FAILED] Save error log file not created at " << expectedPath;
+  std::cout << "[PASSED] Save error log file created at correct path.\n";
+
+  std::ifstream inFile(expectedPath);
+  std::string line;
+  std::getline(inFile, line);
+
+  EXPECT_NE(line.find(testMessage), std::string::npos)
+      << "[FAILED] Save error message missing.";
+  std::cout << "[PASSED] Save error message verified successfully.\n";
+}
+
+// 6. Testing AA::LoadErrorLog (Writes to database.log per Log.h definition)
+TEST_F(LogTest, LoadErrorLogCreatesAndWrites) {
+  std::cout << "[TESTING] Part: AA::LoadErrorLog default path and logging...\n";
+
+  std::string expectedPath = "log/error/database.log";
+  std::string testMessage = "Failed to load configuration file.";
+
+  AA::LoadErrorLog(testMessage);
+
+  ASSERT_TRUE(std::filesystem::exists(expectedPath))
+      << "[FAILED] Load error log file not created at " << expectedPath;
+  std::cout << "[PASSED] Load error log file created at correct path.\n";
+
+  std::ifstream inFile(expectedPath);
+  std::string line;
+  std::getline(inFile, line);
+
+  EXPECT_NE(line.find(testMessage), std::string::npos)
+      << "[FAILED] Load error message missing.";
+  std::cout << "[PASSED] Load error message verified successfully.\n";
 }
 
 // Main function to run all tests

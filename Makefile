@@ -1,6 +1,9 @@
-# Compiler and Base Flags
+# =====================================================================
+# COMPILER AND CONFIGURATION FLAGS
+# =====================================================================
 CXX        := g++
-BASE_FLAGS := -std=c++23 -Wall -Wextra -pthread -Iinclude -Ilibs	-Iexternal/include
+# Added -MMD -MP to automatically track header (.h) dependency modifications
+BASE_FLAGS := -std=c++23 -Wall -Wextra -pthread -Iinclude -Ilibs -Iexternal/include -MMD -MP
 LDFLAGS    := -lcurl -lcryptopp -lgtest -lgtest_main -pthread
 
 # Debug Toggle (Default: Off/Release mode)
@@ -22,22 +25,38 @@ TEST_DIR  := tests
 BUILD_DIR := build
 OBJ_DIR   := $(BUILD_DIR)/obj
 
-# Application Files
-SRCS      := $(wildcard $(SRC_DIR)/*.cpp)
-OBJS      := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SRCS))
-TARGET    := $(BUILD_DIR)/app
+# =====================================================================
+# FILE DISCOVERY & AUTOMATION
+# =====================================================================
 
-# Test Files & Infrastructure
-LIB_COMMON_SRCS  := Connection.cpp Date.cpp Email.cpp
-LIB_COMMON_PATHS := $(addprefix $(LIB_DIR)/, $(LIB_COMMON_SRCS))
+# 1. Automatically find EVERY single .cpp file in src/ and libs/
+APP_SRCS      := $(wildcard $(SRC_DIR)/*.cpp)
+LIB_SRCS      := $(wildcard $(LIB_DIR)/*.cpp)
 
-SRC_COMMON_SRCS  := StudentSingleton.cpp Test.cpp
-SRC_COMMON_PATHS := $(addprefix $(SRC_DIR)/, $(SRC_COMMON_SRCS))
+# 2. Map source files into distinct subdirectories inside build/obj/
+APP_OBJS      := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(APP_SRCS))
+LIB_OBJS      := $(patsubst $(LIB_DIR)/%.cpp, $(OBJ_DIR)/libs/%.o, $(LIB_SRCS))
 
-COMMON_SRC_PATHS := $(LIB_COMMON_PATHS) $(SRC_COMMON_PATHS)
+# 3. Combine them all into a single object list for the main application
+ALL_APP_OBJS  := $(APP_OBJS) $(LIB_OBJS)
+TARGET        := $(BUILD_DIR)/app
 
+# 4. GOOGLE TEST SAFEGUARD:
+# Once created, src/main.cpp will become build/obj/src/main.o.
+# TEST_SAFE_OBJS strips it out so it never collides with gtest_main.
+APP_MAIN_OBJ   := $(OBJ_DIR)/src/main.o
+TEST_SAFE_OBJS := $(filter-out $(APP_MAIN_OBJ), $(ALL_APP_OBJS))
+
+# 5. Automatically discover all test files
 TEST_SRCS        := $(wildcard $(TEST_DIR)/*_test.cpp)
 TEST_EXECUTABLES := $(patsubst $(TEST_DIR)/%_test.cpp, $(BUILD_DIR)/%_test, $(TEST_SRCS))
+
+# 6. Gather all .d tracking files (Application objects + Test objects)
+ALL_DEPS         := $(ALL_APP_OBJS:.o=.d) $(TEST_SRCS:$(TEST_DIR)/%.cpp=$(OBJ_DIR)/tests/%.d)
+
+# =====================================================================
+# APPLICATION BUILD RULES
+# =====================================================================
 
 # Default target: build the main app
 all: print_mode $(TARGET)
@@ -50,21 +69,34 @@ run: all
 	@echo "--- Running Main Application ---"
 	./$(TARGET)
 
-# Link main executable
-$(TARGET): $(OBJS) $(COMMON_SRC_PATHS) | $(BUILD_DIR)
+# Links the application (only looks at pre-compiled object files)
+$(TARGET): $(ALL_APP_OBJS) | $(BUILD_DIR)
+	@echo "Linking $(TARGET)..."
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-# Compile main source files into object files
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
+# Pattern rule: Compile src/ files incrementally
+$(OBJ_DIR)/src/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Pattern rule: Compile libs/ files incrementally
+$(OBJ_DIR)/libs/%.o: $(LIB_DIR)/%.cpp | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # =====================================================================
-# TEST IMPLEMENTATION BLOCK
+# GOOGLE TEST IMPLEMENTATION BLOCK
 # =====================================================================
 
-# Pattern rule to build individual test binaries
-$(BUILD_DIR)/%_test: $(TEST_DIR)/%_test.cpp $(COMMON_SRC_PATHS) | $(BUILD_DIR)
+# Pattern rule: Compile individual test .cpp files into object files first
+$(OBJ_DIR)/tests/%.o: $(TEST_DIR)/%.cpp | $(OBJ_DIR)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Links an individual test suite binary without the app's main.o
+$(BUILD_DIR)/%_test: $(OBJ_DIR)/tests/%_test.o $(TEST_SAFE_OBJS) | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	@echo "Linking Test Suite: $*..."
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # Target to run a single specific test by name (e.g., 'make run-Connection')
@@ -83,28 +115,40 @@ run_all: $(TEST_EXECUTABLES)
 	done
 	@echo "SUCCESS: Passed all tests!"
 
-# Create build directories
 $(BUILD_DIR) $(OBJ_DIR):
 	@mkdir -p $@
+
+# =====================================================================
+# AUTOMATIC HEADER TRACKING INTEGRATION
+# =====================================================================
+# Reads the generated compiler .d files. If any header file listed 
+# inside them changes, Make automatically rebuilds the dependent object.
+-include $(ALL_DEPS)
 
 # =====================================================================
 # CLEAN TARGETS
 # =====================================================================
 
+# NEW: Clean a single specific test suite (e.g., 'make clean-Connection')
+clean-%:
+	@echo "Cleaning specific test suite: $*..."
+	@rm -f $(BUILD_DIR)/$*_test
+	@rm -f $(OBJ_DIR)/tests/$*_test.o
+	@rm -f $(OBJ_DIR)/tests/$*_test.d
+
 # Clean ONLY main application build artifacts (keeps test binaries)
 clean_src:
 	@echo "Cleaning main application object files and binary..."
-	@rm -rf $(OBJ_DIR) $(TARGET)
+	@rm -rf $(OBJ_DIR)/src $(TARGET)
 
-# Clean ONLY compiled test binaries (keeps main app object files)
+# Clean ONLY compiled test binaries and test object files
 clean_test:
-	@echo "Cleaning compiled test binaries..."
-	@rm -f $(TEST_EXECUTABLES)
+	@echo "Cleaning compiled test binaries and object files..."
+	@rm -rf $(OBJ_DIR)/tests $(TEST_EXECUTABLES)
 
 # Clean everything completely
 clean:
 	@echo "Cleaning all build artifacts..."
-	@rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR)
 
 .PHONY: all run clean clean_src clean_test run_all print_mode
-

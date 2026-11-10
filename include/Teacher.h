@@ -48,7 +48,7 @@ class Teacher {
 
   // spaceship operator overload sothat teacher objects are ordered according to
   // their school first then their email address
-  std::strong_ordering operator<=>(const Teacher& rhs) {
+  std::strong_ordering operator<=>(const Teacher& rhs) const {
     if (const auto ret{m_school <=> rhs.m_school}; ret != 0) {
       return ret;
     }
@@ -57,7 +57,7 @@ class Teacher {
 
   // equal-to operator overloads so that two teacher objects are equal if
   // theybhabe the same school, email address, and teacher ID
-  bool operator==(const Teacher& rhs) {
+  bool operator==(const Teacher& rhs) const {
     return m_teacherID == rhs.m_teacherID && m_emailAddr == rhs.m_emailAddr &&
            m_school == rhs.m_school;
   }
