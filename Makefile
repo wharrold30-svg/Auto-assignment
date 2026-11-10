@@ -4,7 +4,12 @@
 CXX        := g++
 # Added -MMD -MP to automatically track header (.h) dependency modifications
 BASE_FLAGS := -std=c++23 -Wall -Wextra -pthread -Iinclude -Ilibs -Iexternal/include -MMD -MP
-LDFLAGS    := -lcurl -lcryptopp -lgtest -lgtest_main -pthread
+
+# Base libraries needed by BOTH the application and your tests
+APP_LDFLAGS  := -lcurl -lcryptopp -pthread
+
+# Test libraries: Automatically includes base libraries + correctly ordered GTest flags
+TEST_LDFLAGS := $(APP_LDFLAGS) -lgtest_main -lgtest
 
 # Debug Toggle (Default: Off/Release mode)
 DEBUG ?= 0
@@ -69,10 +74,10 @@ run: all
 	@echo "--- Running Main Application ---"
 	./$(TARGET)
 
-# Links the application (only looks at pre-compiled object files)
+# Links the application (only looks at base dependencies, no GTest interference)
 $(TARGET): $(ALL_APP_OBJS) | $(BUILD_DIR)
 	@echo "Linking $(TARGET)..."
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $^ $(APP_LDFLAGS) -o $@
 
 # Pattern rule: Compile src/ files incrementally
 $(OBJ_DIR)/src/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
@@ -97,7 +102,7 @@ $(OBJ_DIR)/tests/%.o: $(TEST_DIR)/%.cpp | $(OBJ_DIR)
 $(BUILD_DIR)/%_test: $(OBJ_DIR)/tests/%_test.o $(TEST_SAFE_OBJS) | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	@echo "Linking Test Suite: $*..."
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $^ $(TEST_LDFLAGS) -o $@
 
 # Target to run a single specific test by name (e.g., 'make run-Connection')
 run-%: $(BUILD_DIR)/%_test
@@ -121,15 +126,13 @@ $(BUILD_DIR) $(OBJ_DIR):
 # =====================================================================
 # AUTOMATIC HEADER TRACKING INTEGRATION
 # =====================================================================
-# Reads the generated compiler .d files. If any header file listed 
-# inside them changes, Make automatically rebuilds the dependent object.
 -include $(ALL_DEPS)
 
 # =====================================================================
 # CLEAN TARGETS
 # =====================================================================
 
-# NEW: Clean a single specific test suite (e.g., 'make clean-Connection')
+# Clean a single specific test suite (e.g., 'make clean-Connection')
 clean-%:
 	@echo "Cleaning specific test suite: $*..."
 	@rm -f $(BUILD_DIR)/$*_test
@@ -152,3 +155,4 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 .PHONY: all run clean clean_src clean_test run_all print_mode
+
