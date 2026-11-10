@@ -2,17 +2,12 @@
 
 #include "Date.h"
 
-#include <compare>
 #include <ctime>
 #include <iostream>
 #include <regex>
-#include <sstream>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
-
-#include "nlohmann/json.hpp"
 
 void DT::Date::swap(DT::Date& otherDate) noexcept {
   std::swap(m_date.tm_mon, otherDate.m_date.tm_mon);

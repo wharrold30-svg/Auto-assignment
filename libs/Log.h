@@ -13,10 +13,12 @@
 #include "Sync_stream.h"
 
 namespace Log {
+// The core logging class that handles writing to disk.
+// We keep this as a regular class because it holds state (the file path).
 class Log {
  private:
   std::string m_file;
-  void writeToFile(std::string_view msg) {
+  void writeToFile(std::string_view msg) const {
     auto parentPath = std::filesystem::path(m_file).parent_path();
     if (!parentPath.empty()) {
       std::filesystem::create_directories(parentPath);
@@ -35,37 +37,59 @@ class Log {
   }
 
  public:
-  Log(std::string_view file) : m_file{file} {}
-  virtual ~Log() = default;
-  virtual void operator()(std::string_view msg) { writeToFile(msg); }
+  explicit Log(std::string_view file) : m_file{file} {}
+
+  // Overload operator() so instances of this class can be called like functions
+  void operator()(std::string_view msg) const { writeToFile(msg); }
 };  // Log
 }  // namespace Log
 
 namespace Connection {
-class ConnectionErrorLog : public Log::Log {
- public:
-  ConnectionErrorLog(std::string_view msg)
-      : Log::Log{"log/error/connection.log"} {
-    (*this)(msg);
+struct ConnectionErrorLogFunctor {
+  void operator()(std::string_view msg) const {
+    Log::Log{"log/error/connection.log"}(msg);
   }
-};  // ConnectionErrorLog
+};
+// Global function object instance
+inline constexpr ConnectionErrorLogFunctor ConnectionErrorLog{};
 }  // namespace Connection
 
 namespace Email {
-class EmailErrorLog : public Log::Log {
- public:
-  EmailErrorLog(std::string_view msg) : Log::Log{"log/error/email.log"} {
-    (*this)(msg);
+struct EmailErrorLogFunctor {
+  void operator()(std::string_view msg) const {
+    Log::Log{"log/error/email.log"}(msg);
   }
-};  // EmailErrorLog
+};
+// Global function object instance
+inline constexpr EmailErrorLogFunctor EmailErrorLog{};
 }  // namespace Email
 
 namespace Database {
-class DatabaseErrorLog : public Log::Log {
- public:
-  DatabaseErrorLog(std::string_view msg) : Log::Log{"log/error/database.log"} {
-    (*this)(msg);
+struct DatabaseErrorLogFunctor {
+  void operator()(std::string_view msg) const {
+    Log::Log{"log/error/database.log"}(msg);
   }
-};  // DatabaseErrorLog
+};
+// Global function object instance
+inline constexpr DatabaseErrorLogFunctor DatabaseErrorLog{};
 }  // namespace Database
+
+namespace AA {
+struct SaveErrorLogFunctor {
+  void operator()(std::string_view msg) const {
+    Log::Log{"log/error/database.log"}(msg);
+  }
+};
+
+struct LoadErrorLogFunctor {
+  void operator()(std::string_view msg) const {
+    Log::Log{"log/error/database.log"}(msg);
+  }
+};
+
+// Global function object instances
+inline constexpr SaveErrorLogFunctor SaveErrorLog{};
+inline constexpr LoadErrorLogFunctor LoadErrorLog{};
+}  // namespace AA
+
 #endif

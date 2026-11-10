@@ -3,4 +3,6 @@ CompileFlags:
     -Iinclude,
     -Iexternal/include
   ]
+Diagnostics:
+  Suppress: [builtin_definition]
 

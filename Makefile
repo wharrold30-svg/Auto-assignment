@@ -31,7 +31,7 @@ TARGET    := $(BUILD_DIR)/app
 LIB_COMMON_SRCS  := Connection.cpp Date.cpp Email.cpp
 LIB_COMMON_PATHS := $(addprefix $(LIB_DIR)/, $(LIB_COMMON_SRCS))
 
-SRC_COMMON_SRCS  := StudentSingleton.cpp
+SRC_COMMON_SRCS  := StudentSingleton.cpp Test.cpp
 SRC_COMMON_PATHS := $(addprefix $(SRC_DIR)/, $(SRC_COMMON_SRCS))
 
 COMMON_SRC_PATHS := $(LIB_COMMON_PATHS) $(SRC_COMMON_PATHS)
