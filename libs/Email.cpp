@@ -4,8 +4,64 @@
 
 #include <array>
 #include <format>
+#include <memory>
 #include <random>
 #include <stdexcept>
+#include <string_view>
+
+// Default Real Curl Client implementation for production use
+class RealEmailClient : public Email::IEmailClient {
+ public:
+  CURLcode performSend(const std::string& url, const std::string& username,
+                       const std::string& password, const std::string& mailFrom,
+                       const std::vector<std::string>& recipients,
+                       curl_read_callback readCallback, void* userp) override {
+    CURL* curl = curl_easy_init();
+    if (!curl) return CURLE_FAILED_INIT;
+
+    curl_easy_setopt(curl, CURLOPT_USERNAME, username.c_str());
+    curl_easy_setopt(curl, CURLOPT_PASSWORD, password.c_str());
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_USE_SSL, (long)CURLUSESSL_ALL);
+    curl_easy_setopt(curl, CURLOPT_MAIL_FROM, mailFrom.c_str());
+
+    curl_slist* rcpts = nullptr;
+    for (const auto& r : recipients) {
+      rcpts = curl_slist_append(rcpts, r.c_str());
+    }
+    curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, rcpts);
+    curl_easy_setopt(curl, CURLOPT_READFUNCTION, readCallback);
+    curl_easy_setopt(curl, CURLOPT_READDATA, userp);
+    curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+
+    CURLcode res = curl_easy_perform(curl);
+
+    curl_slist_free_all(rcpts);
+    curl_easy_cleanup(curl);
+    return res;
+  }
+};  // RealEmailClient
+
+// Inside Email constructor implementation:
+Email::Email::Email(std::string_view to, std::string_view from,
+                    std::string_view nameFrom, std::string_view subject,
+                    std::string_view body,
+                    std::optional<std::vector<std::string>> cc,
+                    std::function<DT::Date()> dateProvider,
+                    std::function<std::string()> idProvider,
+                    std::shared_ptr<IEmailClient> curlClient)
+    : m_to{to},
+      m_from{from},
+      m_nameFrom{nameFrom},
+      m_subject{subject},
+      m_body{body},
+      m_cc{cc.value_or(std::vector<std::string>())},
+      m_dateProvider{dateProvider ? std::move(dateProvider)
+                                  : []() { return DT::getCurrentTimeLT(); }},
+      m_idProvider{idProvider ? std::move(idProvider)
+                              : [this]() { return generateMessageId(); }},
+      m_curlClient{curlClient ? std::move(curlClient)
+                              : std::make_shared<RealEmailClient>()} {}
 
 std::string Email::Email::dateTimeNow() const {
   std::time_t now;
@@ -17,8 +73,13 @@ std::string Email::Email::dateTimeNow() const {
   std::string ret;
   ret.resize(RFC5322_TIME_LEN);
 
-  std::strftime(&ret[0], RFC5322_TIME_LEN, "%a, %d %b %y  %H:%M:%S %z", time);
+  // std::strftime returns the number of characters written (excluding the null
+  // terminator)
+  size_t len =
+      std::strftime(&ret[0], ret.size(), "%a, %d %b %Y %H:%M:%S %z", time);
 
+  // Resize the string down to the actual number of characters written
+  ret.resize(len);
   return ret;
 }
 
@@ -54,7 +115,11 @@ std::string Email::Email::generateMessageId() const {
 std::string Email::Email::setPayloadText() {
   std::string payload;
   payload.reserve(1024 + m_body.size() + (m_cc.size() * 30));
-  payload += std::format("Date: {}\r\n", dateTimeNow());
+  // Use the injected date provider, calling getStr() or streaming it
+  // Use the injected date provider and format as RFC 5322 with weekday
+  DT::Date currentDate = m_dateProvider();
+  payload += std::format("Date: {}\r\n", currentDate.toStringWithDay());
+
   payload += std::format("To: <{}>\r\n", m_to);
   payload += std::format("From: <{}>({})\r\n", m_from, m_nameFrom);
   if (!m_cc.empty()) {
@@ -76,15 +141,19 @@ std::string Email::Email::setPayloadText() {
   std::string_view domain = (atPos != std::string::npos)
                                 ? std::string_view(m_from).substr(atPos + 1)
                                 : "unknown;com";
-  payload += std::format("Message-ID<{}@{}>\r\n", generateMessageId(), domain);
-  payload += std::format("Subject {}\r\n", m_subject);
+
+  // Added missing colon and space for Message-ID and Subject headers
+  payload +=
+      std::format("Message-ID: <{}@{}>\r\n", generateMessageId(), domain);
+  payload += std::format("Subject: {}\r\n", m_subject);
+
   payload += "\r\n";
   payload += m_body;
   payload += "\r\n8";
   return payload;
 }
 
-std::size_t Email::Email::payloadSource(void* ptr, std::size_t size,
+std::size_t Email::Email::payloadSource(char* ptr, std::size_t size,
                                         std::size_t nmemb, void* userp) {
   auto* data = static_cast<Data*>(userp);
   // check fir invalid arguments or if transfer is already finished
@@ -110,37 +179,24 @@ std::size_t Email::Email::payloadSource(void* ptr, std::size_t size,
 
 void Email::Email::send(std::string_view url, std::string_view username,
                         std::string_view password) {
-  curl_slist* recipients = nullptr;
-  CURLcode ret = CURLE_OK;
-  CURL* curl = curl_easy_init();
-  if (!curl) {
-    throw std::runtime_error{"curl_easy_init() FAILD"};
-  }
-  curl_easy_setopt(curl, CURLOPT_USERNAME, username.data());
-  curl_easy_setopt(curl, CURLOPT_PASSWORD, password.data());
-  curl_easy_setopt(curl, CURLOPT_URL, url.data());
+  // Delegate to the injected curl client (which defaults to RealEmailClient in
+  // production)
+  Data data{setPayloadText()};
 
-  curl_easy_setopt(curl, CURLOPT_USE_SSL, (long)CURLUSESSL_ALL);
-
-  curl_easy_setopt(curl, CURLOPT_MAIL_FROM, ("<" + m_from + ">").c_str());
-  recipients = curl_slist_append(recipients, ("<" + m_to + ">").c_str());
+  // Build recipients list for the client
+  std::vector<std::string> recipients;
+  recipients.push_back("<" + m_to + ">");
   if (!m_cc.empty()) {
     for (const auto& cc : m_cc) {
-      recipients = curl_slist_append(recipients, ("<" + cc + ">").c_str());
+      recipients.push_back("<" + cc + ">");
     }
   }
-  curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
 
-  curl_easy_setopt(curl, CURLOPT_READFUNCTION, payloadSource);
-  Data data{setPayloadText()};
-  curl_easy_setopt(curl, CURLOPT_READDATA, &data);
-  curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+  std::string mailFrom = "<" + m_from + ">";
 
-  ret = curl_easy_perform(curl);
-
-  curl_slist_free_all(recipients);
-  curl_easy_cleanup(curl);
+  CURLcode ret = m_curlClient->performSend(
+      std::string(url), std::string(username), std::string(password), mailFrom,
+      recipients, payloadSource, &data);
 
   if (ret != CURLE_OK) {
     throw std::runtime_error{

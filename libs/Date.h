@@ -63,8 +63,27 @@ class Date {
 
   // getters
   inline const std::tm& getTM() const { return m_date; }
-  std::string getStr() const;
-  std::string getDBStr() const;
+  // ============================================================================
+  // 1. RFC 5322 with Weekday (Email Header Standard)
+  // Example: "Wed, 18 Nov 2026 14:30:00 +0000"
+  // ============================================================================
+  std::string toStringWithDay() const;
+  // ============================================================================
+  // 2. RFC 5322 without Weekday
+  // Example: "18 Nov 2026 14:30:00 +0000"
+  // ============================================================================
+  std::string toStringNoDay() const;
+  // ============================================================================
+  // 3. SQL / Log Format (Database Standard)
+  // Example: "2026-11-18 14:30:00"
+  // ============================================================================
+  std::string toStringSql() const;
+  // ============================================================================
+  // 4. ISO 8601 / RFC 3339 Format (API & JSON Standard)
+  // Example: "2026-11-18T14:30:00Z" (or using timezone offset)
+  // ============================================================================
+  std::string toStringJSON() const;
+  inline std::string getStr() const { return toStringNoDay(); }
   explicit operator std::string() const;
   bool empty() const;
   inline bool isLT() const { return m_isLT; }

@@ -4,12 +4,27 @@
 #include <curl/curl.h>
 
 #include <ctime>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "Date.h"
+
 namespace Email {
+class IEmailClient {
+ public:
+  virtual ~IEmailClient() = default;
+  virtual CURLcode performSend(const std::string& url,
+                               const std::string& username,
+                               const std::string& password,
+                               const std::string& mailFrom,
+                               const std::vector<std::string>& recipients,
+                               curl_read_callback readCallback,
+                               void* userp) = 0;
+};
 class Email {
  private:
   class Data {
@@ -27,21 +42,25 @@ class Email {
   std::string m_body;
   std::vector<std::string> m_cc;
 
+  // Injected dependencies
+  std::function<DT::Date()> m_dateProvider;
+  std::function<std::string()> m_idProvider;
+  std::shared_ptr<IEmailClient> m_curlClient;
+
+ protected:
   std::string setPayloadText();
   std::string generateMessageId() const;
-  static std::size_t payloadSource(void* ptr, std::size_t size,
+  static std::size_t payloadSource(char* ptr, std::size_t size,
                                    std::size_t nmemb, void* userp);
 
  public:
+  // Constructor with dependency injection defaults
   Email(std::string_view to, std::string_view from, std::string_view nameFrom,
         std::string_view subject, std::string_view body,
-        std::optional<std::vector<std::string>> cc = std::nullopt)
-      : m_to{to},
-        m_from{from},
-        m_nameFrom{nameFrom},
-        m_subject{subject},
-        m_body{body},
-        m_cc{cc.value_or(std::vector<std::string>())} {}
+        std::optional<std::vector<std::string>> cc = std::nullopt,
+        std::function<DT::Date()> dateProvider = nullptr,
+        std::function<std::string()> idProvider = nullptr,
+        std::shared_ptr<IEmailClient> curlClient = nullptr);
 
   Email(const Email&) = delete;
   Email& operator=(const Email&) = delete;
