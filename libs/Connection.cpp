@@ -3,14 +3,14 @@
 #include "Connection.h"
 
 #include <arpa/inet.h>
-#include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <cstring>
+#include <format>
 
-inline int Connection::Socket::safeRead(int fd, void* buf, std::size_t count) {
+int Connection::Socket::safeRead(int fd, void* buf, std::size_t count) {
   int retval;
   retval = read(fd, buf, count);
   if (retval == -1) {
@@ -20,8 +20,7 @@ inline int Connection::Socket::safeRead(int fd, void* buf, std::size_t count) {
   return retval;
 }
 
-inline int Connection::Socket::safeWrite(int fd, const char* buf,
-                                         std::size_t count) {
+int Connection::Socket::safeWrite(int fd, const char* buf, std::size_t count) {
   int retval;
   retval = write(fd, buf, count);
   if (retval == -1) {
@@ -31,7 +30,7 @@ inline int Connection::Socket::safeWrite(int fd, const char* buf,
   return retval;
 }
 
-inline int Connection::Socket::readBuffer(int fd, char* buf, int count) {
+int Connection::Socket::readBuffer(int fd, char* buf, int count) {
   if (count < 0) {
     throw NetworkError{"readBuffer count < 0"};
   }
@@ -53,7 +52,7 @@ inline int Connection::Socket::readBuffer(int fd, char* buf, int count) {
   return status;
 }
 
-inline int Connection::Socket::writeBuffer(int fd, const char* buf, int count) {
+int Connection::Socket::writeBuffer(int fd, const char* buf, int count) {
   if (count < 0) {
     throw NetworkError{"readBuffer count < 0"};
   }
@@ -73,7 +72,7 @@ inline int Connection::Socket::writeBuffer(int fd, const char* buf, int count) {
   return status;
 }
 
-inline unsigned long Connection::Socket::readNetulong() {
+unsigned long Connection::Socket::readNetulong() {
   char buffer[sizeof(uint32_t)];
   int status = 0;
 
@@ -84,15 +83,15 @@ inline unsigned long Connection::Socket::readNetulong() {
                     status, sizeof(uint32_t))};
   }
 
-  uint32_t* value;
-  std::memcpy(value, buffer, sizeof(uint32_t));
+  uint32_t value;
+  std::memcpy(&value, buffer, sizeof(value));
 
-  *value = ntohl(*value);
+  value = ntohl(value);
 
-  return static_cast<unsigned long>(*value);
+  return static_cast<unsigned long>(value);
 }
 
-inline void Connection::Socket::writeNetulong(const unsigned long value) {
+void Connection::Socket::writeNetulong(const unsigned long value) {
   char buffer[sizeof(uint32_t)];
   uint32_t temp;
   temp = htonl(value);
@@ -105,19 +104,30 @@ inline void Connection::Socket::writeNetulong(const unsigned long value) {
   }
 }
 
-inline std::optional<std::string> Connection::Socket::rx() {
+std::optional<std::string> Connection::Socket::rx() {
   unsigned long messageLength{readNetulong()};
-  char buffer[messageLength];
 
-  int n = readBuffer(m_socket, buffer, messageLength);
-  if (n == 0) {
+  // 1. Guard against empty reads or maliciously huge lengths
+  constexpr unsigned long MAX_MESSAGE_SIZE = 10 * 1024 * 1024;  // e.g., 10 MB
+  if (messageLength == 0 || messageLength > MAX_MESSAGE_SIZE) {
     return std::nullopt;
   }
 
-  return std::string(buffer, n);
+  // 2. Allocate directly inside a std::string (avoids VLAs and extra copies)
+  std::string buffer(messageLength, '\0');
+
+  int n = readBuffer(m_socket, buffer.data(), messageLength);
+
+  // 3. Check for disconnection or partial reads/errors
+  if (n <= 0 || static_cast<unsigned long>(n) < messageLength) {
+    return std::nullopt;
+  }
+
+  buffer.resize(n);
+  return buffer;
 }
 
-inline bool Connection::Socket::sx(std::string_view str) {
+bool Connection::Socket::sx(std::string_view str) {
   writeNetulong(str.length());
 
   int n = writeBuffer(m_socket, str.data(), str.length());
@@ -169,6 +179,6 @@ Connection::PortListener::PortListener(unsigned short port) {
   }
 }
 
-inline Connection::Connection Connection::PortListener::startServer() {
+Connection::Connection Connection::PortListener::startServer() {
   return Connection{m_socket.getSocket()};
 }

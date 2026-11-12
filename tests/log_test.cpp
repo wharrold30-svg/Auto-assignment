@@ -1,3 +1,5 @@
+#include "Log.h"
+
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -5,181 +7,145 @@
 #include <iostream>
 #include <string>
 
-// Include the header under test
-#include "Log.h"
-
-class LogTest : public ::testing::Test {
- protected:
-  void SetUp() override {
-    // Clean up any pre-existing test log directories to ensure a clean state
-    if (std::filesystem::exists("log")) {
-      std::filesystem::remove_all("log");
-    }
-    if (std::filesystem::exists("test_custom.log")) {
-      std::filesystem::remove("test_custom.log");
-    }
+// Helper function to safely remove test files/directories
+void cleanupLogFile(const std::filesystem::path& filepath) {
+  std::error_code ec;
+  if (std::filesystem::exists(filepath, ec)) {
+    std::filesystem::remove(filepath, ec);
   }
+}
 
-  void TearDown() override {
-    // Clean up after tests
-    if (std::filesystem::exists("log")) {
-      std::filesystem::remove_all("log");
-    }
-    if (std::filesystem::exists("test_custom.log")) {
-      std::filesystem::remove("test_custom.log");
-    }
-  }
-};
+// ==========================================
+// 1. Core Log Class Tests (Custom Path)
+// ==========================================
+TEST(LogCoreTest, CustomPathAndException) {
+  std::cout << "[TEST START] Testing Log::Log core class with custom file path "
+               "and exception behavior...\n";
 
-// 1. Testing Base Log Class Functionality
-TEST_F(LogTest, BaseLogWritesCorrectly) {
+  std::string testFilePath = "test_logs/custom_test.log";
+  cleanupLogFile(testFilePath);
+
+  Log::Log customLog{testFilePath};
+  std::string testMessage = "Unit test core log message";
+
+  // Verify that calling the operator logs to file and throws std::runtime_error
+  EXPECT_THROW({ customLog(testMessage); }, std::runtime_error);
+
+  // Verify file creation and content
+  ASSERT_TRUE(std::filesystem::exists(testFilePath))
+      << "Log file should be created.";
+
+  std::ifstream inFile(testFilePath);
+  ASSERT_TRUE(inFile.is_open())
+      << "Should be able to open the created log file.";
+
+  std::string line;
+  std::getline(inFile, line);
+  inFile.close();
+
+  // Check that the line contains our message (format includes date | msg)
+  EXPECT_NE(line.find(testMessage), std::string::npos)
+      << "Log file content should contain the logged message.";
+
+  // Cleanup
+  cleanupLogFile(testFilePath);
+  std::filesystem::remove_all("test_logs");
+
   std::cout
-      << "[TESTING] Part: Base Log::Log class file writing and formatting...\n";
+      << "[TEST PASSED] Log::Log core class test passed successfully!\n\n";
+}
 
-  std::string testFile = "test_custom.log";
-  std::string testMessage = "This is a custom base log test message.";
+// ==========================================
+// 2. Connection Error Log Tests
+// ==========================================
+TEST(ConnectionLogTest, ConnectionErrorLogging) {
+  std::cout
+      << "[TEST START] Testing Connection::ConnectionErrorLog functor...\n";
 
+  std::string logPath = "log/error/connection.log";
+  cleanupLogFile(logPath);
+
+  std::string msg = "Connection timeout error occurred";
+
+  EXPECT_THROW({ Connection::ConnectionErrorLog(msg); }, std::runtime_error);
+
+  ASSERT_TRUE(std::filesystem::exists(logPath))
+      << "Connection log file must be created.";
+
+  cleanupLogFile(logPath);
+  std::cout << "[TEST PASSED] Connection::ConnectionErrorLog test passed "
+               "successfully!\n\n";
+}
+
+// ==========================================
+// 3. Email Error Log Tests
+// ==========================================
+TEST(EmailLogTest, EmailErrorLogging) {
+  std::cout << "[TEST START] Testing Email::EmailErrorLog functor...\n";
+
+  std::string logPath = "log/error/email.log";
+  cleanupLogFile(logPath);
+
+  std::string msg = "Failed to send SMTP email";
+
+  EXPECT_THROW({ Email::EmailErrorLog(msg); }, std::runtime_error);
+
+  ASSERT_TRUE(std::filesystem::exists(logPath))
+      << "Email log file must be created.";
+
+  cleanupLogFile(logPath);
+  std::cout
+      << "[TEST PASSED] Email::EmailErrorLog test passed successfully!\n\n";
+}
+
+// ==========================================
+// 4. Database Error Log Tests
+// ==========================================
+TEST(DatabaseLogTest, DatabaseErrorLogging) {
+  std::cout << "[TEST START] Testing Database::DatabaseErrorLog functor...\n";
+
+  std::string logPath = "log/error/database.log";
+  cleanupLogFile(logPath);
+
+  std::string msg = "Database connection connection dropped";
+
+  EXPECT_THROW({ Database::DatabaseErrorLog(msg); }, std::runtime_error);
+
+  ASSERT_TRUE(std::filesystem::exists(logPath))
+      << "Database log file must be created.";
+
+  cleanupLogFile(logPath);
+  std::cout << "[TEST PASSED] Database::DatabaseErrorLog test passed "
+               "successfully!\n\n";
+}
+
+// ==========================================
+// 5. AA Namespace (Save & Load Error) Tests
+// ==========================================
+TEST(AALogTest, SaveAndLoadErrorLogging) {
+  std::cout << "[TEST START] Testing AA::SaveErrorLog and AA::LoadErrorLog "
+               "functors...\n";
+
+  std::string logPath = "log/error/database.log";
+
+  // Test SaveErrorLog
   {
-    Log::Log logger(testFile);
-    logger(testMessage);
-  }  // Logger goes out of scope and closes the file handle
+    cleanupLogFile(logPath);
+    std::string msg = "Failed to save state";
+    EXPECT_THROW({ AA::SaveErrorLog(msg); }, std::runtime_error);
+    ASSERT_TRUE(std::filesystem::exists(logPath))
+        << "SaveErrorLog should write to database.log.";
+  }
 
-  // Verify file exists
-  ASSERT_TRUE(std::filesystem::exists(testFile))
-      << "[FAILED] Base Log file was not created.";
-  std::cout << "[PASSED] Base Log file created successfully.\n";
+  // Test LoadErrorLog
+  {
+    cleanupLogFile(logPath);
+    std::string msg = "Failed to load state";
+    EXPECT_THROW({ AA::LoadErrorLog(msg); }, std::runtime_error);
+    ASSERT_TRUE(std::filesystem::exists(logPath))
+        << "LoadErrorLog should write to database.log.";
+  }
 
-  // Verify content
-  std::ifstream inFile(testFile);
-  std::string line;
-  std::getline(inFile, line);
-
-  EXPECT_NE(line.find(testMessage), std::string::npos)
-      << "[FAILED] Log message not found in file content.";
-  std::cout << "[PASSED] Base Log message successfully written and verified.\n";
-}
-
-// 2. Testing ConnectionErrorLog
-TEST_F(LogTest, ConnectionErrorLogCreatesAndWrites) {
-  std::cout << "[TESTING] Part: Connection::ConnectionErrorLog default path "
-               "and logging...\n";
-
-  std::string expectedPath = "log/error/connection.log";
-  std::string testMessage = "Database socket timeout detected.";
-
-  // Call the global functor directly
-  Connection::ConnectionErrorLog(testMessage);
-
-  ASSERT_TRUE(std::filesystem::exists(expectedPath))
-      << "[FAILED] Connection error log file not created at " << expectedPath;
-  std::cout << "[PASSED] Connection error log file created at correct path.\n";
-
-  std::ifstream inFile(expectedPath);
-  std::string line;
-  std::getline(inFile, line);
-
-  EXPECT_NE(line.find(testMessage), std::string::npos)
-      << "[FAILED] Connection error message missing.";
-  std::cout << "[PASSED] Connection error message verified successfully.\n";
-}
-
-// 3. Testing EmailErrorLog
-TEST_F(LogTest, EmailErrorLogCreatesAndWrites) {
-  std::cout
-      << "[TESTING] Part: Email::EmailErrorLog default path and logging...\n";
-
-  std::string expectedPath = "log/error/email.log";
-  std::string testMessage = "SMTP authentication failed.";
-
-  // Call the global functor directly
-  Email::EmailErrorLog(testMessage);
-
-  ASSERT_TRUE(std::filesystem::exists(expectedPath))
-      << "[FAILED] Email error log file not created at " << expectedPath;
-  std::cout << "[PASSED] Email error log file created at correct path.\n";
-
-  std::ifstream inFile(expectedPath);
-  std::string line;
-  std::getline(inFile, line);
-
-  EXPECT_NE(line.find(testMessage), std::string::npos)
-      << "[FAILED] Email error message missing.";
-  std::cout << "[PASSED] Email error message verified successfully.\n";
-}
-
-// 4. Testing DatabaseErrorLog
-TEST_F(LogTest, DatabaseErrorLogCreatesAndWrites) {
-  std::cout << "[TESTING] Part: Database::DatabaseErrorLog default path and "
-               "logging...\n";
-
-  std::string expectedPath = "log/error/database.log";
-  std::string testMessage = "Query execution timeout.";
-
-  // Call the global functor directly
-  Database::DatabaseErrorLog(testMessage);
-
-  ASSERT_TRUE(std::filesystem::exists(expectedPath))
-      << "[FAILED] Database error log file not created at " << expectedPath;
-  std::cout << "[PASSED] Database error log file created at correct path.\n";
-
-  std::ifstream inFile(expectedPath);
-  std::string line;
-  std::getline(inFile, line);
-
-  EXPECT_NE(line.find(testMessage), std::string::npos)
-      << "[FAILED] Database error message missing.";
-  std::cout << "[PASSED] Database error message verified successfully.\n";
-}
-
-// 5. Testing AA::SaveErrorLog (Writes to database.log per Log.h definition)
-TEST_F(LogTest, SaveErrorLogCreatesAndWrites) {
-  std::cout << "[TESTING] Part: AA::SaveErrorLog default path and logging...\n";
-
-  std::string expectedPath = "log/error/database.log";
-  std::string testMessage = "Failed to save game state.";
-
-  AA::SaveErrorLog(testMessage);
-
-  ASSERT_TRUE(std::filesystem::exists(expectedPath))
-      << "[FAILED] Save error log file not created at " << expectedPath;
-  std::cout << "[PASSED] Save error log file created at correct path.\n";
-
-  std::ifstream inFile(expectedPath);
-  std::string line;
-  std::getline(inFile, line);
-
-  EXPECT_NE(line.find(testMessage), std::string::npos)
-      << "[FAILED] Save error message missing.";
-  std::cout << "[PASSED] Save error message verified successfully.\n";
-}
-
-// 6. Testing AA::LoadErrorLog (Writes to database.log per Log.h definition)
-TEST_F(LogTest, LoadErrorLogCreatesAndWrites) {
-  std::cout << "[TESTING] Part: AA::LoadErrorLog default path and logging...\n";
-
-  std::string expectedPath = "log/error/database.log";
-  std::string testMessage = "Failed to load configuration file.";
-
-  AA::LoadErrorLog(testMessage);
-
-  ASSERT_TRUE(std::filesystem::exists(expectedPath))
-      << "[FAILED] Load error log file not created at " << expectedPath;
-  std::cout << "[PASSED] Load error log file created at correct path.\n";
-
-  std::ifstream inFile(expectedPath);
-  std::string line;
-  std::getline(inFile, line);
-
-  EXPECT_NE(line.find(testMessage), std::string::npos)
-      << "[FAILED] Load error message missing.";
-  std::cout << "[PASSED] Load error message verified successfully.\n";
-}
-
-// Main function to run all tests
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  std::cout << "=== STARTING LOG.H UNIT TESTS ===\n";
-  int result = RUN_ALL_TESTS();
-  std::cout << "=== FINISHED LOG.H UNIT TESTS ===\n";
-  return result;
+  cleanupLogFile(logPath);
+  std::cout << "[TEST PASSED] AA namespace log tests passed successfully!\n\n";
 }

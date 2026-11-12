@@ -2,14 +2,12 @@
 #define CONNECTION_H
 
 #include <arpa/inet.h>
-#include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 
 #include <compare>
 #include <cstring>
-#include <format>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -26,12 +24,12 @@ class NetworkError : public std::runtime_error {
 class Socket {
  private:
   int m_socket;
-  inline int safeRead(int fd, void* buf, std::size_t count);
-  inline int safeWrite(int fd, const char* buf, std::size_t count);
-  inline int readBuffer(int fd, char* buf, int count);
-  inline int writeBuffer(int fd, const char* buf, int count);
-  inline unsigned long readNetulong();
-  inline void writeNetulong(const unsigned long value);
+  int safeRead(int fd, void* buf, std::size_t count);
+  int safeWrite(int fd, const char* buf, std::size_t count);
+  int readBuffer(int fd, char* buf, int count);
+  int writeBuffer(int fd, const char* buf, int count);
+  unsigned long readNetulong();
+  void writeNetulong(const unsigned long value);
 
  public:
   Socket(const int socket) : m_socket{socket} {
@@ -41,8 +39,8 @@ class Socket {
   }
   Socket() : Socket{socket(AF_INET, SOCK_STREAM, 0)} {}
 
-  inline std::optional<std::string> rx();
-  inline bool sx(std::string_view str);
+  std::optional<std::string> rx();
+  bool sx(std::string_view str);
   inline int getSocket() const { return m_socket; }
 };  // Socket
 
@@ -94,7 +92,7 @@ class PortListener {
 
  public:
   explicit PortListener(unsigned short port);
-  inline Connection startServer();
+  Connection startServer();
 };  // PortListener
 class ConnectContainer {
  private:

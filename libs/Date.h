@@ -62,7 +62,7 @@ class Date {
   friend void swap(Date& one, Date& other) noexcept;
 
   // getters
-  inline std::tm getTM() const { return m_date; }
+  inline const std::tm& getTM() const { return m_date; }
   std::string getStr() const;
   std::string getDBStr() const;
   explicit operator std::string() const;
@@ -71,6 +71,7 @@ class Date {
 
   // setters
   void setTM(std::string_view str = " ");
+  void setTM(const std::tm& date) { m_date = date; }
   inline void normalize() { std::mktime(&m_date); }
   void clear();
   // a pair of functions for converting m_date to either GMT or local time

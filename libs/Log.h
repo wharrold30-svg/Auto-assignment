@@ -40,7 +40,10 @@ class Log {
   explicit Log(std::string_view file) : m_file{file} {}
 
   // Overload operator() so instances of this class can be called like functions
-  void operator()(std::string_view msg) const { writeToFile(msg); }
+  void operator()(std::string_view msg) const {
+    writeToFile(msg);
+    throw std::runtime_error{msg.data()};
+  }
 };  // Log
 }  // namespace Log
 
