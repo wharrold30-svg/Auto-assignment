@@ -117,6 +117,7 @@ class Test {
   DT::Date m_dueDate;
   TestVec m_test;
   std::string m_subject;
+  std::string m_testID;
   std::string m_description;
   std::set<studentExt> m_students;
   std::size_t m_level = 0;
@@ -128,11 +129,16 @@ class Test {
     return *p1 < *p2;
   };
 
+  static std::string generateID();
+
  public:
   Test() = default;
   Test(std::string_view testName, const Teacher& teacher,
        const std::size_t level)
-      : m_name{testName}, m_teacher{teacher}, m_level{level} {}
+      : m_name{testName},
+        m_teacher{teacher},
+        m_testID{generateID()},
+        m_level{level} {}
   // getters
   const std::string& getTestName() const { return m_name; }
   const Teacher& getTeacher() const { return m_teacher; }
@@ -161,6 +167,7 @@ class Test {
 
   std::optional<std::vector<std::size_t>> getWrongAnswers(
       const std::shared_ptr<Student>& student) const;
+  const std::string& getTestID() const { return m_testID; }
   // setters
   void setDueDate(const DT::Date& date) { m_dueDate = date; }
   void setSentDate(const DT::Date& date) { m_sentDate = date; }

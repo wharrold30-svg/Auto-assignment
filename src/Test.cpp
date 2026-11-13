@@ -283,3 +283,23 @@ std::optional<std::vector<std::size_t>> AA::Test::getWrongAnswers(
   auto pos{m_students.find(temp)};
   return pos->getWrongAnswers();
 }
+std::string AA::Test::generateID() {
+  std::string ret;
+  std::size_t idLen{15};
+  ret.reserve(idLen);
+
+  // Resize the string down to the actual number of characters written
+  static const char alphanum[] =
+      "01234567890"
+      "abcdefghijklmnopqrstuvexyz"
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const int strLen{std::size(alphanum) - 1};
+
+  std::random_device rd;
+  std::mt19937 mt(rd());
+  while (ret.size() < idLen) {
+    std::uniform_int_distribution<int> dist(0, strLen - 1);
+    ret += alphanum[dist(mt)];
+  }
+  return ret;
+}
