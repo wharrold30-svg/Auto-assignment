@@ -67,6 +67,7 @@ class Test {
     std::vector<std::string> m_returnTest;
     std::vector<std::size_t> m_wrongAnswers;
     float m_grade = 0.0f;
+    DT::Date m_rcvDate;
 
    public:
     studentExt() = default;
@@ -78,10 +79,12 @@ class Test {
       return m_returnTest;
     }
 
-    const std::vector<std::size_t>& getWrongAnswerd() const {
+    const std::vector<std::size_t>& getWrongAnswers() const {
       return m_wrongAnswers;
     }
     const float& getGrade() const { return m_grade; }
+
+    const DT::Date& getRcvDate() const { return m_rcvDate; }
 
     // setters
     void setWrongAnswer(const std::size_t num) {
@@ -92,6 +95,8 @@ class Test {
     void setReturnedTest(const std::vector<std::string>& test) {
       m_returnTest = test;
     }
+
+    void setRcvDate(const DT::Date& date) { m_rcvDate = date; }
 
     std::strong_ordering operator<=>(const studentExt& other) const {
       return static_cast<const Student&>(*this) <=>
@@ -139,14 +144,23 @@ class Test {
 
   const DT::Date& getSentDate() const { return m_sentDate; }
   const DT::Date& getDueDate() const { return m_dueDate; }
+
   std::vector<std::string> getStudentTest(
       const std::shared_ptr<Student>& student) const;
 
   using studentGradeMap =
       std::map<std::shared_ptr<Student>, double, decltype(studentLess)>;
+
   std::optional<studentGradeMap> getStudents(
       const std::size_t period = 0) const;
 
+  std::optional<DT::Date> getRcvDate(
+      const std::shared_ptr<Student>& student) const;
+
+  float getGrade(const std::shared_ptr<Student>& student) const;
+
+  std::optional<std::vector<std::size_t>> getWrongAnswers(
+      const std::shared_ptr<Student>& student) const;
   // setters
   void setDueDate(const DT::Date& date) { m_dueDate = date; }
   void setSentDate(const DT::Date& date) { m_sentDate = date; }
@@ -157,7 +171,8 @@ class Test {
   void setLevel(const std::size_t level) { m_level = level; }
   void setTest(const TestVec& tVec) { m_test = tVec; }
   bool setStudentTest(const std::shared_ptr<Student>& student,
-                      const std::vector<std::string>& test);
+                      const std::vector<std::string>& test,
+                      const DT::Date& date);
   // add and remove students
   void addStudent(const std::shared_ptr<Student>& student);
   void removeStudent(const std::shared_ptr<Student>& student);

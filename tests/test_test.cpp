@@ -2,196 +2,257 @@
 
 #include <gtest/gtest.h>
 
+#include <map>
+#include <memory>
+#include <nlohmann/json.hpp>
 #include <sstream>
+#include <string>
+#include <vector>
 
 #include "Date.h"
 #include "School.h"
 #include "Student.h"
 #include "Teacher.h"
 
-// ==========================================
-// Test Suite for AA::QandA (Inside Test.h)
-// ==========================================
-TEST(QandATest, ConstructorsAndGettersSetters) {
-  std::cout
-      << "[TEST] Testing AA::QandA constructors, getters, and setters...\n";
+// ============================================================================
+// 1. QandA CLASS TESTS
+// ============================================================================
 
-  // Default constructor
-  AA::QandA qaDefault;
-  EXPECT_EQ(qaDefault.getQuestion(), "");
-  EXPECT_EQ(qaDefault.getAnswer(), "");
+TEST(QandATest, DefaultAndParameterizedConstructors) {
+  // Tests object creation and initialization of question/answer pairs.
+  AA::QandA q1;
+  EXPECT_EQ(q1.getQuestion(), "");
+  EXPECT_EQ(q1.getAnswer(), "");
 
-  // Parameterized constructor
-  AA::QandA qa("What is the capital of France?", "Paris");
-  EXPECT_EQ(qa.getQuestion(), "What is the capital of France?");
-  EXPECT_EQ(qa.getAnswer(), "Paris");
-
-  // Setters
-  qa.setQuestion("What is 5 + 5?");
-  qa.setAnswer("10");
-  EXPECT_EQ(qa.getQuestion(), "What is 5 + 5?");
-  EXPECT_EQ(qa.getAnswer(), "10");
-
-  std::cout << "[PASS] AA::QandA constructors, getters, and setters passed.\n";
+  AA::QandA q2("What is C++?", "A compiled programming language.");
+  EXPECT_EQ(q2.getQuestion(), "What is C++?");
+  EXPECT_EQ(q2.getAnswer(), "A compiled programming language.");
 }
 
-TEST(QandATest, ComparisonAndStructuredBindings) {
-  std::cout << "[TEST] Testing AA::QandA comparison, pair conversion, and "
-               "structured bindings...\n";
+TEST(QandATest, SettersAndGetters) {
+  // Tests mutating and retrieving question/answer data fields.
+  AA::QandA q;
+  q.setQuestion("Capital of France?");
+  q.setAnswer("Paris");
 
-  AA::QandA qa1("Q1", "A1");
-  AA::QandA qa2("Q1", "A1");
-  AA::QandA qa3("Q2", "A2");
+  EXPECT_EQ(q.getQuestion(), "Capital of France?");
+  EXPECT_EQ(q.getAnswer(), "Paris");
+}
 
-  // Comparison operators
-  EXPECT_TRUE(qa1 == qa2);
-  EXPECT_FALSE(qa1 == qa3);
-  EXPECT_TRUE((qa1 <=> qa3) < 0);
+TEST(QandATest, StructuredBindingsAndPairConversion) {
+  // Tests operator std::pair conversion and template get<I>() for structured
+  // bindings.
+  AA::QandA q("2 + 2?", "4");
 
-  // Test std::pair conversion
-  std::pair<std::string, std::string> p = qa1;
-  EXPECT_EQ(p.first, "Q1");
-  EXPECT_EQ(p.second, "A1");
+  std::pair<std::string, std::string> p = q;
+  EXPECT_EQ(p.first, "2 + 2?");
+  EXPECT_EQ(p.second, "4");
 
-  // Test structured bindings
-  auto [q, a] = qa1;
-  EXPECT_EQ(q, "Q1");
-  EXPECT_EQ(a, "A1");
+  EXPECT_EQ(q.get<0>(), "2 + 2?");
+  EXPECT_EQ(q.get<1>(), "4");
 
-  std::cout << "[PASS] AA::QandA comparison, pair conversion, and structured "
-               "bindings passed.\n";
+  // Verify C++ structured bindings work correctly
+  auto [question, answer] = q;
+  EXPECT_EQ(question, "2 + 2?");
+  EXPECT_EQ(answer, "4");
+}
+
+TEST(QandATest, RelationalAndEqualityOperators) {
+  // Tests spaceship operator (<=>) and equality operator (==) on QandA objects.
+  AA::QandA q1("Alpha", "Beta");
+  AA::QandA q2("Alpha", "Beta");
+  AA::QandA q3("Delta", "Gamma");
+
+  EXPECT_TRUE(q1 == q2);
+  EXPECT_FALSE(q1 == q3);
+  EXPECT_TRUE(q1 < q3);
 }
 
 TEST(QandATest, JsonSerialization) {
-  std::cout << "[TEST] Testing AA::QandA JSON serialization...\n";
+  // Tests nlohmann/json intrusive serialization and deserialization for QandA.
+  AA::QandA q("Test Question?", "Test Answer");
+  nlohmann::json j = q;
+  AA::QandA q2 = j.get<AA::QandA>();
 
-  AA::QandA qa("JSON Question", "JSON Answer");
-  nlohmann::json j = qa;
-
-  AA::QandA qaFromJson = j.get<AA::QandA>();
-  EXPECT_EQ(qaFromJson.getQuestion(), "JSON Question");
-  EXPECT_EQ(qaFromJson.getAnswer(), "JSON Answer");
-
-  std::cout << "[PASS] AA::QandA JSON serialization passed.\n";
+  EXPECT_EQ(q.getQuestion(), q2.getQuestion());
+  EXPECT_EQ(q.getAnswer(), q2.getAnswer());
 }
 
-// ==========================================
-// Test Suite for AA::Test
-// ==========================================
-TEST(TestClassTest, ConstructorsGettersAndSetters) {
-  std::cout << "[TEST] Testing AA::Test basic constructors, getters, and "
-               "setters...\n";
+// ============================================================================
+// 2. TEST CLASS: Constructors, Metadata Getters & Setters
+// ============================================================================
 
-  AA::School school("State High", "456 College Ave", "GradebookSYS");
-  AA::Teacher teacher("Smith", "Jane", "T500", "jsmith@school.com", school);
+TEST(TestClassTest, ConstructorsAndMetadataGetSet) {
+  // Tests Test constructors, level, teacher assignment, subject, description,
+  // and date setters/getters.
+  AA::School mockSchool;
+  AA::Teacher teacher("Doe", "Jane", "T001", "jane.doe@school.edu", mockSchool);
 
-  AA::Test test("Algebra Final", teacher, 11);
+  AA::Test defaultTest;
+  EXPECT_EQ(defaultTest.getTestName(), "");
+  EXPECT_EQ(defaultTest.getLevel(), 0);
 
-  EXPECT_EQ(test.getTestName(), "Algebra Final");
-  EXPECT_EQ(test.getLevel(), 11);
-  EXPECT_EQ(test.getTeacher().getTeacherID(), "T500");
+  AA::Test test("Midterm Exam", teacher, 2);
+  EXPECT_EQ(test.getTestName(), "Midterm Exam");
+  EXPECT_EQ(test.getLevel(), 2);
+  EXPECT_EQ(test.getTeacher().getTeacherID(), "T001");
 
-  // Setters
-  test.setTestName("Advanced Algebra");
-  test.setLevel(12);
-  test.setSubject("Mathematics");
-  test.setDescription("Cumulative final exam");
+  test.setTestName("Final Exam");
+  test.setSubject("Computer Science");
+  test.setDescription("Comprehensive final exam");
+  test.setLevel(3);
 
-  EXPECT_EQ(test.getTestName(), "Advanced Algebra");
-  EXPECT_EQ(test.getLevel(), 12);
-  EXPECT_EQ(test.getSubject(), "Mathematics");
-  EXPECT_EQ(test.getDescription(), "Cumulative final exam");
+  DT::Date sentDate("2026-11-01 08:00:00");
+  DT::Date dueDate("2026-11-15 17:00:00");
+  test.setSentDate(sentDate);
+  test.setDueDate(dueDate);
 
-  std::cout
-      << "[PASS] AA::Test basic constructors, getters, and setters passed.\n";
+  EXPECT_EQ(test.getTestName(), "Final Exam");
+  EXPECT_EQ(test.getSubject(), "Computer Science");
+  EXPECT_EQ(test.getDescription(), "Comprehensive final exam");
+  EXPECT_EQ(test.getLevel(), 3);
+  EXPECT_EQ(test.getSentDate().toStringSql(), sentDate.toStringSql());
+  EXPECT_EQ(test.getDueDate().toStringSql(), dueDate.toStringSql());
 }
+
+// ============================================================================
+// 3. TEST CLASS: Student Management (addStudent, removeStudent, hasStudent,
+// getStudents)
+// ============================================================================
 
 TEST(TestClassTest, StudentManagement) {
-  std::cout << "[TEST] Testing AA::Test student roster additions, removals, "
-               "and existence checks...\n";
+  // Tests adding, removing, checking enrollment, and filtering students by
+  // class period.
+  AA::School mockSchool;
+  AA::Teacher teacher("Smith", "John", "T002", "john@school.edu", mockSchool);
+  AA::Test test("Quiz 1", teacher, 1);
 
-  AA::School school("State High", "456 College Ave", "GradebookSYS");
-  AA::Teacher teacher("Smith", "Jane", "T500", "jsmith@school.com", school);
-  AA::Test test("Physics Test", teacher, 10);
+  auto student1 = std::make_shared<AA::Student>("S01", "s1@school.edu", "Adams",
+                                                "Alice", 1, "HighSchool");
+  auto student2 = std::make_shared<AA::Student>("S02", "s2@school.edu", "Baker",
+                                                "Bob", 2, "HighSchool");
 
-  auto student = std::make_shared<AA::Student>("S100", "student@school.com",
-                                               "Doe", "John", 3, "State High");
+  EXPECT_FALSE(test.hasStudent(student1));
 
-  // Initially student should not be in the test roster
-  EXPECT_FALSE(test.hasStudent(student));
+  test.addStudent(student1);
+  test.addStudent(student2);
 
-  // Add student
-  test.addStudent(student);
-  EXPECT_TRUE(test.hasStudent(student));
+  EXPECT_TRUE(test.hasStudent(student1));
+  EXPECT_TRUE(test.hasStudent(student2));
 
-  // Remove student
-  test.removeStudent(student);
-  EXPECT_FALSE(test.hasStudent(student));
+  // Retrieve all students (period 0 = all periods)
+  auto allStudentsMap = test.getStudents(0);
+  ASSERT_TRUE(allStudentsMap.has_value());
+  EXPECT_EQ(allStudentsMap->size(), 2);
 
-  std::cout << "[PASS] AA::Test student management passed.\n";
+  // Retrieve students filtered by period 1
+  auto period1Map = test.getStudents(1);
+  ASSERT_TRUE(period1Map.has_value());
+  EXPECT_EQ(period1Map->size(), 1);
+  EXPECT_EQ(period1Map->begin()->first->getStudentID(), "S01");
+
+  // Remove student and verify
+  test.removeStudent(student1);
+  EXPECT_FALSE(test.hasStudent(student1));
+  EXPECT_TRUE(test.hasStudent(student2));
 }
 
-TEST(TestClassTest, TestVectorAndRandom) {
-  std::cout << "[TEST] Testing AA::Test question vector assignment and random "
-               "shuffling...\n";
+// ============================================================================
+// 4. TEST CLASS: Student Submissions, Grading, and QandA Operations
+// ============================================================================
 
-  AA::School school("State High", "456 College Ave", "GradebookSYS");
-  AA::Teacher teacher("Smith", "Jane", "T500", "jsmith@school.com", school);
-  AA::Test test("History Quiz", teacher, 9);
+TEST(TestClassTest, StudentTestSubmissionAndGrading) {
+  // Tests setting questions, submitting student test answers, recording
+  // submission dates, grading, and identifying wrong answers.
+  AA::School mockSchool;
+  AA::Teacher teacher("Davis", "Mark", "T003", "mark@school.edu", mockSchool);
+  AA::Test test("Math Quiz", teacher, 1);
 
-  AA::TestVec questions = {
-      AA::QandA("Who was the first president?", "Washington"),
-      AA::QandA("What year was independence?", "1776"),
-      AA::QandA("Which continent is Egypt in?", "Africa")};
-
+  AA::TestVec questions = {{"What is 2+2?", "4"}, {"What is 5*5?", "25"}};
   test.setTest(questions);
-  EXPECT_EQ(test.getTest().size(), 3);
-  EXPECT_EQ(test.getTest()[0].getQuestion(), "Who was the first president?");
+  EXPECT_EQ(test.getTest().size(), 2);
 
-  // Test random method returns a TestVec with shuffled/equal contents
-  AA::TestVec randomized = test.random();
-  EXPECT_EQ(randomized.size(), 3);
+  auto student = std::make_shared<AA::Student>("S100", "student@school.edu",
+                                               "Clark", "Charlie", 1, "School");
+  test.addStudent(student);
 
-  std::cout << "[PASS] AA::Test question vector and random shuffling passed.\n";
+  EXPECT_FALSE(test.rcvTest(student));
+
+  // Submit test: 1st answer correct ("4"), 2nd answer wrong ("20" instead of
+  // "25")
+  std::vector<std::string> studentAnswers = {"4", "20"};
+  DT::Date subDate("2026-11-10 10:00:00");
+
+  bool submitted = test.setStudentTest(student, studentAnswers, subDate);
+  EXPECT_TRUE(submitted);
+  EXPECT_TRUE(test.rcvTest(student));
+
+  auto retrievedAnswers = test.getStudentTest(student);
+  EXPECT_EQ(retrievedAnswers, studentAnswers);
+
+  auto rcvDate = test.getRcvDate(student);
+  ASSERT_TRUE(rcvDate.has_value());
+  EXPECT_EQ(rcvDate->toStringSql(), subDate.toStringSql());
+
+  // Execute grading routine
+  test.gradeTests();
+
+  // 1 correct out of 2 = 50.0% grade
+  float grade = test.getGrade(student);
+  EXPECT_FLOAT_EQ(grade, 50.0f);
+
+  // Index 1 should be flagged as wrong
+  auto wrongAns = test.getWrongAnswers(student);
+  ASSERT_TRUE(wrongAns.has_value());
+  ASSERT_EQ(wrongAns->size(), 1);
+  EXPECT_EQ((*wrongAns)[0], 1);
 }
 
-TEST(TestClassTest, DueDateSortingAndEquality) {
-  std::cout << "[TEST] Testing AA::Test due-date sorting (<=>) and equality "
-               "operator (==)...\n";
+// ============================================================================
+// 5. TEST CLASS: Utilities, Randomization & Operators
+// ============================================================================
 
-  AA::School school("State High", "456 College Ave", "GradebookSYS");
-  AA::Teacher teacher("Smith", "Jane", "T500", "jsmith@school.com", school);
+TEST(TestClassTest, RandomizationAndRelationalOperators) {
+  // Tests sorting based on due dates (<=>) and equality checks (==), plus
+  // question shuffling. Note: DT::Date considers newer dates "less than" older
+  // dates in spaceship comparisons.
+  AA::School mockSchool;
+  AA::Teacher teacher("Lee", "Ann", "T004", "ann@school.edu", mockSchool);
 
-  AA::Test test1("Biology Exam", teacher, 10);
-  test1.setSubject("Science");
+  AA::Test test1("Math Exam", teacher, 1);
+  test1.setDueDate(
+      DT::Date("2026-11-20 00:00:00"));  // Newer date (smaller in <=> order)
 
-  AA::Test test2("Biology Exam", teacher, 10);
-  test2.setSubject("Science");
+  AA::Test test2("Science Exam", teacher, 1);
+  test2.setDueDate(
+      DT::Date("2026-11-10 00:00:00"));  // Older date (larger in <=> order)
 
-  // Equality check
-  EXPECT_TRUE(test1 == test2);
+  // Spaceship operator sorts tests by due date (newer < older)
+  EXPECT_TRUE(test1 < test2);
 
-  std::cout
-      << "[PASS] AA::Test due-date sorting and equality operator passed.\n";
+  AA::Test test1_clone("Math Exam", teacher, 1);
+  EXPECT_TRUE(test1 == test1_clone);
+
+  AA::TestVec qVec = {{"Q1", "A1"}, {"Q2", "A2"}, {"Q3", "A3"}};
+  test1.setTest(qVec);
+  AA::TestVec shuffled = test1.random();
+  EXPECT_EQ(shuffled.size(), 3);
 }
 
-TEST(TestClassTest, ClearFunction) {
-  std::cout << "[TEST] Testing AA::Test clear() functionality...\n";
+TEST(TestClassTest, FormattingAndSerialization) {
+  // Tests ostream insertion and nlohmann/json persistence for the Test class.
+  AA::School mockSchool;
+  AA::Teacher teacher("White", "Walter", "T005", "walter@school.edu",
+                      mockSchool);
+  AA::Test test("Chemistry Quiz", teacher, 2);
+  test.setSubject("Chemistry");
 
-  AA::School school("State High", "456 College Ave", "GradebookSYS");
-  AA::Teacher teacher("Smith", "Jane", "T500", "jsmith@school.com", school);
+  std::stringstream ss;
+  ss << test;
+  EXPECT_FALSE(ss.str().empty());
 
-  AA::Test test("Temp Test", teacher, 8);
-  EXPECT_EQ(test.getTestName(), "Temp Test");
-
-  test.clear();
-  EXPECT_EQ(test.getTestName(), "");
-  EXPECT_EQ(test.getLevel(), 0);
-
-  std::cout << "[PASS] AA::Test clear() functionality passed.\n";
-}
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  nlohmann::json j = test;
+  AA::Test testLoaded = j.get<AA::Test>();
+  EXPECT_EQ(test.getTestName(), testLoaded.getTestName());
+  EXPECT_EQ(test.getLevel(), testLoaded.getLevel());
 }

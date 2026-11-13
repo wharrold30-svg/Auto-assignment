@@ -38,7 +38,8 @@ std::vector<std::string> AA::Test::getStudentTest(
 }
 
 bool AA::Test::setStudentTest(const std::shared_ptr<Student>& student,
-                              const std::vector<std::string>& test) {
+                              const std::vector<std::string>& test,
+                              const DT::Date& rcvDate) {
   studentExt temp{student};
 
   auto loc{m_students.find(temp)};
@@ -48,6 +49,7 @@ bool AA::Test::setStudentTest(const std::shared_ptr<Student>& student,
   auto node = m_students.extract(loc);
 
   node.value().setReturnedTest(test);
+  node.value().setRcvDate(rcvDate);
 
   m_students.insert(std::move(node));
   return true;
@@ -101,7 +103,7 @@ void AA::Test::gradeTests() {
     }
     // calculate the grade
     const std::size_t correctAnswers{m_test.size() -
-                                     student.getWrongAnswerd().size()};
+                                     student.getWrongAnswers().size()};
     const float grade{static_cast<float>(correctAnswers) / m_test.size()};
 
     setGrade(student, grade * 100);
@@ -253,4 +255,31 @@ std::ostream& operator<<(std::ostream& os, const AA::Test& test) {
   // AA::Report report{test};
   // os << "\n" << report;
   return os;
+}
+std::optional<DT::Date> AA::Test::getRcvDate(
+    const std::shared_ptr<Student>& student) const {
+  if (!rcvTest(student)) {
+    return std::nullopt;
+  }
+  studentExt temp{student};
+  auto pos{m_students.find(temp)};
+  return pos->getRcvDate();
+}
+float AA::Test::getGrade(const std::shared_ptr<Student>& student) const {
+  if (!rcvTest(student)) {
+    return 0.0f;
+  }
+  studentExt temp{student};
+  auto pos{m_students.find(temp)};
+  return pos->getGrade();
+}
+
+std::optional<std::vector<std::size_t>> AA::Test::getWrongAnswers(
+    const std::shared_ptr<Student>& student) const {
+  if (!rcvTest(student)) {
+    return std::nullopt;
+  }
+  studentExt temp{student};
+  auto pos{m_students.find(temp)};
+  return pos->getWrongAnswers();
 }
