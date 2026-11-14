@@ -41,7 +41,7 @@ struct adl_serializer<std::tm> {
 namespace DT {
 class Date {
  private:
-  std::tm m_date;
+  mutable std::tm m_date;
   bool m_isLT{false};
   bool validateDateTime(std::string_view str) const;
 
@@ -83,7 +83,14 @@ class Date {
   // Example: "2026-11-18T14:30:00Z" (or using timezone offset)
   // ============================================================================
   std::string toStringJSON() const;
+
   inline std::string getStr() const { return toStringNoDay(); }
+
+  inline std::chrono::system_clock::time_point toTimePoint() const {
+    std::time_t time_t_val = std::mktime(&m_date);
+    return std::chrono::system_clock::from_time_t(time_t_val);
+  }
+
   explicit operator std::string() const;
   bool empty() const;
   inline bool isLT() const { return m_isLT; }

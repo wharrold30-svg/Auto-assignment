@@ -149,6 +149,23 @@ std::ostream& operator<<(std::ostream& os, const AA::Report& report) {
 
 std::string AA::buildTeacherReport(const Test& test) {
   std::ostringstream out;
+  const auto& teacher = test.getTeacher();
+  std::string teacher_email = teacher.getEmailAddr();
+  std::string teacher_name = teacher.getName();
+
+  std::string teacher_subject = "Test Report & Grades: " + test.getTestName();
+  std::string teacher_body = std::format(
+      "Hello {},\n\n"
+      "The deadline for test \"{}\" (ID: {}) has been reached.\n"
+      "All submitted student tests have been automatically graded.\n\n"
+      "Subject: {}\n"
+      "Description: {}\n\n"
+      "Best regards,\n"
+      "Auto-Assignment System",
+      teacher_name, test.getTestName(), test.getTestID(), test.getSubject(),
+      test.getDescription());
+  out << teacher_subject << "\n";
+  out << teacher_body << "\n";
   Report report{test};
   out << test << "\n" << report;
   return out.str();
@@ -157,11 +174,20 @@ std::string AA::buildTeacherReport(const Test& test) {
 std::string AA::buildStundentReport(const std::shared_ptr<Student>& pStudent,
                                     const Test& test) {
   std::ostringstream out;
-  out << pStudent->getName() << "\n";
-  out << pStudent->getStudentID() << "\n";
-  out << "Test: " << test.getTestName() << "\n";
-  out << "Given on: " << test.getSentDate().toStringWithDay() << "\n";
-  out << "Turn in deadline: " << test.getDueDate().toStringWithDay() << "\n";
+  std::string student_email = pStudent->getEmailAddr();
+  std::string student_name = pStudent->getName();
+  float student_grade = test.getGrade(pStudent);
+
+  std::string student_subject = "Your Grade Report: " + test.getTestName();
+  std::string student_body = std::format(
+      "Hello {},\n\n"
+      "Your test \"{}\" given on: {} has been graded.\n"
+      "Your Final Grade: {:.2f}%\n\n"
+      "Keep up the hard work!\n\n"
+      "Best regards,\n"
+      "{}",
+      student_name, test.getTestName(), test.getSentDate().toStringWithDay(),
+      student_grade, test.getTeacher().getName());
 
   auto foundTest{test.getStudentTest(pStudent)};
   if (foundTest.empty()) {
@@ -170,7 +196,6 @@ std::string AA::buildStundentReport(const std::shared_ptr<Student>& pStudent,
   }
   out << "Turned in on: " << test.getRcvDate(pStudent).value().toStringWithDay()
       << "\n";
-  out << "Grade: " << test.getGrade(pStudent) << "n";
   const auto& rcvTest{test.getStudentTest(pStudent)};
   const auto& origTest{test.getTest()};
   auto foundWA{test.getWrongAnswers(pStudent)};
