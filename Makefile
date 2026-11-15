@@ -34,8 +34,8 @@ OBJ_DIR   := $(BUILD_DIR)/obj
 # FILE DISCOVERY & AUTOMATION
 # =====================================================================
 
-# 1. Automatically find EVERY single .cpp file in src/ and libs/
-APP_SRCS      := $(wildcard $(SRC_DIR)/*.cpp)
+# 1. Automatically find EVERY single .cpp file in src/ (including subdirs like src/sql/), libs/, etc.
+APP_SRCS      := $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/*/*.cpp)
 LIB_SRCS      := $(wildcard $(LIB_DIR)/*.cpp)
 
 # 2. Map source files into distinct subdirectories inside build/obj/
@@ -79,7 +79,7 @@ $(TARGET): $(ALL_APP_OBJS) | $(BUILD_DIR)
 	@echo "Linking $(TARGET)..."
 	$(CXX) $(CXXFLAGS) $^ $(APP_LDFLAGS) -o $@
 
-# Pattern rule: Compile src/ files incrementally
+# Pattern rule: Compile src/ files incrementally (handles subdirectories like src/sql/ automatically)
 $(OBJ_DIR)/src/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -98,7 +98,7 @@ $(OBJ_DIR)/tests/%.o: $(TEST_DIR)/%.cpp | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Links an individual test suite binary without the app's main.o
+# Links an individual test suite binary without the app's main.o (includes SQL classes automatically via TEST_SAFE_OBJS)
 $(BUILD_DIR)/%_test: $(OBJ_DIR)/tests/%_test.o $(TEST_SAFE_OBJS) | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	@echo "Linking Test Suite: $*..."

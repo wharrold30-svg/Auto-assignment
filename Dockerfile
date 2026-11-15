@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
     libcrypto++-dev \
     libgtest-dev \
+    libmysql++-dev \
+    libmysqlclient-dev \
     cmake \
     && rm -rf /var/lib/apt/lists/*
 
