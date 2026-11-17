@@ -48,8 +48,8 @@ TEST_F(StudentSingletonTest, TestAddAndGetSingleStudent) {
   auto& singleton = AA::StudentSingleton::Instance();
 
   // Constructor: (studentID, emailAddr, lName, fName, classPeriod, school)
-  AA::Student student1("S001", "alice@school.com", "Smith", "Alice", 1,
-                       "Lincoln High");
+  AA::School s;
+  AA::Student student1("S001", "alice@school.com", "Smith", "Alice", 1, s);
   singleton.addStudent(student1);
 
   auto students = singleton.getStudents();
@@ -68,10 +68,10 @@ TEST_F(StudentSingletonTest, TestAddAndRemoveStudentSet) {
 
   auto& singleton = AA::StudentSingleton::Instance();
 
+  AA::School s;
   std::set<AA::Student> studentSet = {
-      AA::Student("S002", "bob@school.com", "Jones", "Bob", 2, "Lincoln High"),
-      AA::Student("S003", "charlie@school.com", "Brown", "Charlie", 2,
-                  "Lincoln High")};
+      AA::Student("S002", "bob@school.com", "Jones", "Bob", 2, s),
+      AA::Student("S003", "charlie@school.com", "Brown", "Charlie", 2, s)};
 
   singleton.addStudent(studentSet);
   auto students = singleton.getStudents();
@@ -93,8 +93,8 @@ TEST_F(StudentSingletonTest, TestPeriodSubscriptOperator) {
 
   auto& singleton = AA::StudentSingleton::Instance();
 
-  AA::Student student1("S004", "david@school.com", "Miller", "David", 3,
-                       "Lincoln High");
+  AA::School s;
+  AA::Student student1("S004", "david@school.com", "Miller", "David", 3, s);
   singleton.addStudent(student1);
 
   // Test valid period lookup
@@ -128,10 +128,9 @@ TEST_F(StudentSingletonTest, TestFindStudent) {
 
   auto& singleton = AA::StudentSingleton::Instance();
 
-  AA::Student target("S005", "eve@school.com", "Davis", "Eve", 1,
-                     "Lincoln High");
-  AA::Student stranger("S999", "frank@school.com", "Wilson", "Frank", 1,
-                       "Lincoln High");
+  AA::School s;
+  AA::Student target("S005", "eve@school.com", "Davis", "Eve", 1, s);
+  AA::Student stranger("S999", "frank@school.com", "Wilson", "Frank", 1, s);
 
   singleton.addStudent(target);
 
@@ -152,11 +151,11 @@ TEST_F(StudentSingletonTest, TestFindStudent) {
 TEST_F(StudentSingletonTest, TestMaxNameLength) {
   std::cout << "[TEST PART] Testing: Free Function maxNameLength\n";
 
+  AA::School s;
   std::set<AA::Student> sampleStudents = {
-      AA::Student("S006", "al@school.com", "Smith", "Al", 1, "Lincoln High"),
-      AA::Student("S007", "alexander@school.com", "Smith", "Alexander", 1,
-                  "Lincoln High"),
-      AA::Student("S008", "bob@school.com", "Jones", "Bob", 1, "Lincoln High")};
+      AA::Student("S006", "al@school.com", "Smith", "Al", 1, s),
+      AA::Student("S007", "alexander@school.com", "Smith", "Alexander", 1, s),
+      AA::Student("S008", "bob@school.com", "Jones", "Bob", 1, s)};
 
   std::size_t maxLength = AA::maxNameLength(sampleStudents);
   // Adjust expected length based on whether maxNameLength evaluates first name,

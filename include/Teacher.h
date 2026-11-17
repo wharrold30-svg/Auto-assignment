@@ -1,12 +1,12 @@
 #ifndef TEACHER_H
 #define TEACHER_H
 #include <compare>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 
 #include "School.h"
 #include "nlohmann/json.hpp"
+#include "sql/SSQLS.h"
 
 namespace AA {
 class Teacher {
@@ -60,6 +60,24 @@ class Teacher {
   bool operator==(const Teacher& rhs) const {
     return m_teacherID == rhs.m_teacherID && m_emailAddr == rhs.m_emailAddr &&
            m_school == rhs.m_school;
+  }
+
+  // mapping to SSQLS
+  SSQLS::teachers toSSQLS() const {
+    SSQLS::teachers row;
+    row.teacher_id = m_teacherID;
+    row.l_name = m_lName;
+    row.f_name = m_fName;
+    row.email_addr = m_emailAddr;
+    row.school_name = m_school.getName();
+    return row;
+  }
+
+  static Teacher fromSSQLS(const SSQLS::teachers& row,
+                           const School& school = School{}) {
+    return Teacher(row.teacher_id, row.l_name, row.f_name, row.email_addr,
+                   school  // Pass the hydrated School object here
+    );
   }
 
   NLOHMANN_DEFINE_TYPE_INTRUSIVE(Teacher, m_lName, m_fName, m_teacherID,

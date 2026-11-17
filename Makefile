@@ -3,10 +3,10 @@
 # =====================================================================
 CXX        := g++
 # Added -MMD -MP to automatically track header (.h) dependency modifications
-BASE_FLAGS := -std=c++23 -Wall -Wextra -pthread -Iinclude -Ilibs -Iexternal/include -MMD -MP
+BASE_FLAGS := -std=c++23 -Wall -Wextra -pthread -Iinclude -Ilibs -Iexternal/include -I/usr/include/mysql -MMD -MP
 
 # Base libraries needed by BOTH the application and your tests
-APP_LDFLAGS  := -lcurl -lcryptopp -pthread
+APP_LDFLAGS  := -lcurl -lcryptopp -lmysqlpp -lmysqlclient -pthread
 
 # Test libraries: Automatically includes base libraries + correctly ordered GTest flags
 TEST_LDFLAGS := $(APP_LDFLAGS) -lgtest_main -lgtest

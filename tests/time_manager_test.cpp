@@ -46,7 +46,7 @@ TEST_F(TimerManagerTest, BasicExpirationTest) {
   AA::School school("Oakridge High", "123 Education Lane", "MainGradebook2026");
 
   AA::Teacher teacher("Smith", "John", "T1", "john.smith@school.com", school);
-  AA::Test test("Math Midterm", teacher, 100);
+  AA::Test test("Math Midterm", teacher, "id", 100);
 
   // Set due date 1 second in the future
   auto t = std::time(nullptr) + 1;
@@ -107,7 +107,7 @@ TEST_F(TimerManagerTest, DynamicResetShorterTimerTest) {
   AA::Teacher teacher("Smith", "John", "T1", "john.smith@school.com", school);
 
   // 1. Schedule long test (e.g., 3 seconds out)
-  AA::Test long_test("Final Exam", teacher, 100);
+  AA::Test long_test("Final Exam", teacher, "id1", 100);
   long_test.setDueDate(make_due_date(3));
   manager.scheduleTest(long_test);
 
@@ -115,7 +115,7 @@ TEST_F(TimerManagerTest, DynamicResetShorterTimerTest) {
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
   // 2. Schedule shorter test (1 second out - should reset wait)
-  AA::Test short_test("Pop Quiz", teacher, 50);
+  AA::Test short_test("Pop Quiz", teacher, "id2", 50);
   short_test.setDueDate(make_due_date(1));
   manager.scheduleTest(short_test);
 
@@ -164,7 +164,7 @@ TEST_F(TimerManagerTest, MockClockControlTest) {
 
   AA::School school("Oakridge High", "District 4", "MainGradebook2026");
   AA::Teacher teacher("Smith", "John", "T1", "john.smith@school.com", school);
-  AA::Test future_test("Project Due", teacher, 100);
+  AA::Test future_test("Project Due", teacher, "id3", 100);
 
   auto future_time = mock_now + std::chrono::hours(1);
   std::time_t ft_c = std::chrono::system_clock::to_time_t(future_time);

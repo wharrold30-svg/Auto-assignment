@@ -1,8 +1,2 @@
 CompileFlags:
-  Add: [
-    -Iinclude,
-    -Iexternal/include
-  ]
-Diagnostics:
-  Suppress: [builtin_definition]
-
+  Add: [-std=c++23, -Iinclude, -Ilibs, -Iexternal/include, -I/usr/include/mysql]

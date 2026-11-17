@@ -154,7 +154,7 @@ std::ostream& operator<<(std::ostream& os,
     auto tests{student.getTests()};
     if (!tests.empty()) {
       for (const auto& test : tests) {
-        os << std::format("{} : {:3} |", test.testName, test.grade);
+        os << std::format("{} : {:3} |", test.getTestName(), test.getGrade());
       }
     }
     // separator

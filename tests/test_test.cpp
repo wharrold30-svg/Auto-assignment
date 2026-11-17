@@ -2,17 +2,9 @@
 
 #include <gtest/gtest.h>
 
-#include <map>
-#include <memory>
-#include <nlohmann/json.hpp>
 #include <sstream>
-#include <string>
-#include <vector>
 
-#include "Date.h"
-#include "School.h"
-#include "Student.h"
-#include "Teacher.h"
+#include "School.h"  // Required for Teacher constructor
 
 // ============================================================================
 // 1. QandA CLASS TESTS
@@ -92,7 +84,7 @@ TEST(TestClassTest, ConstructorsAndMetadataGetSet) {
   EXPECT_EQ(defaultTest.getTestName(), "");
   EXPECT_EQ(defaultTest.getLevel(), 0);
 
-  AA::Test test("Midterm Exam", teacher, 2);
+  AA::Test test("Midterm Exam", teacher, "id2", 2);
   EXPECT_EQ(test.getTestName(), "Midterm Exam");
   EXPECT_EQ(test.getLevel(), 2);
   EXPECT_EQ(test.getTeacher().getTeacherID(), "T001");
@@ -125,12 +117,14 @@ TEST(TestClassTest, StudentManagement) {
   // class period.
   AA::School mockSchool;
   AA::Teacher teacher("Smith", "John", "T002", "john@school.edu", mockSchool);
-  AA::Test test("Quiz 1", teacher, 1);
+  AA::Test test("Quiz 1", teacher, "id", 1);
 
+  AA::School s;
+  s.setName("HighSchool");
   auto student1 = std::make_shared<AA::Student>("S01", "s1@school.edu", "Adams",
-                                                "Alice", 1, "HighSchool");
+                                                "Alice", 1, s);
   auto student2 = std::make_shared<AA::Student>("S02", "s2@school.edu", "Baker",
-                                                "Bob", 2, "HighSchool");
+                                                "Bob", 2, s);
 
   EXPECT_FALSE(test.hasStudent(student1));
 
@@ -166,14 +160,16 @@ TEST(TestClassTest, StudentTestSubmissionAndGrading) {
   // submission dates, grading, and identifying wrong answers.
   AA::School mockSchool;
   AA::Teacher teacher("Davis", "Mark", "T003", "mark@school.edu", mockSchool);
-  AA::Test test("Math Quiz", teacher, 1);
+  AA::Test test("Math Quiz", teacher, "id", 1);
 
   AA::TestVec questions = {{"What is 2+2?", "4"}, {"What is 5*5?", "25"}};
   test.setTest(questions);
   EXPECT_EQ(test.getTest().size(), 2);
 
+  AA::School s;
+  s.setName("School");
   auto student = std::make_shared<AA::Student>("S100", "student@school.edu",
-                                               "Clark", "Charlie", 1, "School");
+                                               "Clark", "Charlie", 1, s);
   test.addStudent(student);
 
   EXPECT_FALSE(test.rcvTest(student));
@@ -214,23 +210,20 @@ TEST(TestClassTest, StudentTestSubmissionAndGrading) {
 
 TEST(TestClassTest, RandomizationAndRelationalOperators) {
   // Tests sorting based on due dates (<=>) and equality checks (==), plus
-  // question shuffling. Note: DT::Date considers newer dates "less than" older
-  // dates in spaceship comparisons.
+  // question shuffling.
   AA::School mockSchool;
   AA::Teacher teacher("Lee", "Ann", "T004", "ann@school.edu", mockSchool);
 
-  AA::Test test1("Math Exam", teacher, 1);
-  test1.setDueDate(
-      DT::Date("2026-11-20 00:00:00"));  // Newer date (smaller in <=> order)
+  AA::Test test1("Math Exam", teacher, "id1", 1);
+  test1.setDueDate(DT::Date("2026-11-10 00:00:00"));
 
-  AA::Test test2("Science Exam", teacher, 1);
-  test2.setDueDate(
-      DT::Date("2026-11-10 00:00:00"));  // Older date (larger in <=> order)
+  AA::Test test2("Science Exam", teacher, "id2", 1);
+  test2.setDueDate(DT::Date("2026-11-20 00:00:00"));
 
-  // Spaceship operator sorts tests by due date (newer < older)
+  // Spaceship operator sorts tests by due date
   EXPECT_TRUE(test1 < test2);
 
-  AA::Test test1_clone("Math Exam", teacher, 1);
+  AA::Test test1_clone("Math Exam", teacher, "id1", 1);
   EXPECT_TRUE(test1 == test1_clone);
 
   AA::TestVec qVec = {{"Q1", "A1"}, {"Q2", "A2"}, {"Q3", "A3"}};
@@ -244,7 +237,7 @@ TEST(TestClassTest, FormattingAndSerialization) {
   AA::School mockSchool;
   AA::Teacher teacher("White", "Walter", "T005", "walter@school.edu",
                       mockSchool);
-  AA::Test test("Chemistry Quiz", teacher, 2);
+  AA::Test test("Chemistry Quiz", teacher, "id2", 2);
   test.setSubject("Chemistry");
 
   std::stringstream ss;

@@ -21,7 +21,7 @@ class ReportTestFixture : public ::testing::Test {
   AA::School mockSchool;
   AA::Teacher teacher{"Smith", "John", "T001", "john.smith@school.edu",
                       mockSchool};
-  AA::Test testObj{"Final Physics Exam", teacher, 2};
+  AA::Test testObj{"Final Physics Exam", teacher, "TEST001", 2};
 
   std::shared_ptr<AA::Student> s1;
   std::shared_ptr<AA::Student> s2;
@@ -38,18 +38,19 @@ class ReportTestFixture : public ::testing::Test {
 
     // Create students with completely unique last/first names to avoid std::map
     // key collisions
+    AA::School s;
     s1 = std::make_shared<AA::Student>("S01", "s1@school.edu", "Alpha", "Alice",
-                                       1, "HighSchool");
+                                       1, s);
     s2 = std::make_shared<AA::Student>("S02", "s2@school.edu", "Bravo", "Bob",
-                                       1, "HighSchool");
+                                       1, s);
     s3 = std::make_shared<AA::Student>("S03", "s3@school.edu", "Charlie",
-                                       "Cathy", 2, "HighSchool");
+                                       "Cathy", 2, s);
     s4 = std::make_shared<AA::Student>("S04", "s4@school.edu", "Delta", "David",
-                                       2, "HighSchool");
+                                       2, s);
     s5 = std::make_shared<AA::Student>("S05", "s5@school.edu", "Echo", "Emma",
-                                       3, "HighSchool");
+                                       3, s);
     s6 = std::make_shared<AA::Student>("S06", "s6@school.edu", "Foxtrot",
-                                       "Frank", 3, "HighSchool");
+                                       "Frank", 3, s);
 
     testObj.addStudent(s1);
     testObj.addStudent(s2);

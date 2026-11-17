@@ -39,8 +39,8 @@ std::vector<std::string> AA::Test::getStudentTest(
 
 bool AA::Test::setStudentTest(const std::shared_ptr<Student>& student,
                               const std::vector<std::string>& test,
-                              const DT::Date& rcvDate) {
-  studentExt temp{student};
+                              const DT::Date& rcvDate, std::size_t id) {
+  studentExt temp{student, id};
 
   auto loc{m_students.find(temp)};
   if (loc == m_students.end()) {
@@ -56,61 +56,43 @@ bool AA::Test::setStudentTest(const std::shared_ptr<Student>& student,
 }
 
 void AA::Test::gradeTests() {
-  auto setGrade = [this](const studentExt& temp, const float grade) -> bool {
-    auto loc{m_students.find(temp)};
-    if (loc == m_students.end()) {
-      return false;
-    }
-    auto node = m_students.extract(loc);
+  if (m_test.empty()) {
+    return;
+  }
 
-    node.value().setGrade(grade);
-
-    m_students.insert(std::move(node));
-    return true;
-  };
-  auto setWrongAnswer = [this](const studentExt& temp,
-                               const std::size_t num) -> bool {
-    auto loc{m_students.find(temp)};
-    if (loc == m_students.end()) {
-      return false;
-    }
-    auto node = m_students.extract(loc);
-
-    node.value().setWrongAnswer(num);
-
-    m_students.insert(std::move(node));
-    return true;
-  };
-
-  for (const auto& student : m_students) {
-    // if a test hasnt been returned then set it to 0.0
-    if (student.getReturnTest().empty()) {
-      setGrade(student, 0.0f);
-      continue;
+  // Helper lambda that grades a mutable studentExt object in one pass
+  auto gradeOne = [this](studentExt& s) {
+    const auto& answers = s.getReturnTest();
+    if (answers.empty()) {
+      s.setGrade(0.0f);
+      return;
     }
 
-    // Compare the student's answer to the correct answer
-    // insert the number of the incorrect answer into the
-    // student's wrong answets
-    const auto& studentAnswers = student.getReturnTest();
-
+    std::size_t wrongCount = 0;
     for (std::size_t i{0}; i < m_test.size(); ++i) {
       const auto& [question, answer] = m_test[i];
-
-      if (answer != studentAnswers.at(i)) {
-        setWrongAnswer(student, i);
+      if (i >= answers.size() || answer != answers[i]) {
+        s.setWrongAnswer(i);
+        ++wrongCount;
       }
     }
-    // calculate the grade
-    const std::size_t correctAnswers{m_test.size() -
-                                     student.getWrongAnswers().size()};
-    const float grade{static_cast<float>(correctAnswers) / m_test.size()};
 
-    setGrade(student, grade * 100);
+    const std::size_t correct = m_test.size() - wrongCount;
+    s.setGrade((static_cast<float>(correct) / m_test.size()) * 100.0f);
+  };
+
+  // Safe iterator-advancing extraction loop (C++17)
+  for (auto it = m_students.begin(); it != m_students.end();) {
+    // Advance iterator BEFORE extracting the current node
+    auto node = m_students.extract(it++);
+    gradeOne(node.value());
+    m_students.insert(std::move(node));
   }
 }
-void AA::Test::addStudent(const std::shared_ptr<Student>& student) {
-  studentExt temp{student};
+
+void AA::Test::addStudent(const std::shared_ptr<Student>& student,
+                          const std::size_t id) {
+  studentExt temp{student, id};
   m_students.insert(std::move(temp));
 }
 

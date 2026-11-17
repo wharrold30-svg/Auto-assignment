@@ -15,7 +15,7 @@ TEST(StudentTest, DefaultConstructor) {
   EXPECT_EQ(student.getEmailAddr(), "");
   EXPECT_EQ(student.getLName(), "");
   EXPECT_EQ(student.getFName(), "");
-  EXPECT_EQ(student.getSchool(), "");
+  EXPECT_EQ(student.getSchool(), AA::School{});
   EXPECT_TRUE(student.getTests().empty());
   std::cout << "[PASSED] Default Constructor initialized with default/empty "
                "values.\n";
@@ -26,15 +26,15 @@ TEST(StudentTest, DefaultConstructor) {
 // ==========================================
 TEST(StudentTest, ParameterizedConstructorAndGetters) {
   std::cout << "[TESTING] Parameterized Constructor and Getters...\n";
-  AA::Student student("S12345", "john.doe@school.com", "Doe", "John", 2,
-                      "Lincoln High");
+  AA::School s;
+  AA::Student student("S12345", "john.doe@school.com", "Doe", "John", 2, s);
 
   EXPECT_EQ(student.getStudentID(), "S12345");
   EXPECT_EQ(student.getEmailAddr(), "john.doe@school.com");
   EXPECT_EQ(student.getLName(), "Doe");
   EXPECT_EQ(student.getFName(), "John");
   EXPECT_EQ(student.getClassPeriod(), 2);
-  EXPECT_EQ(student.getSchool(), "Lincoln High");
+  EXPECT_EQ(student.getSchool(), s);
   std::cout << "[PASSED] Parameterized Constructor and Getters return correct "
                "values.\n";
 }
@@ -51,14 +51,14 @@ TEST(StudentTest, Setters) {
   student.setLName("Smith");
   student.setFName("Jane");
   student.setClassPeriod(4);
-  student.setSchool("Washington High");
+  student.setSchool(AA::School{});
 
   EXPECT_EQ(student.getStudentID(), "S99999");
   EXPECT_EQ(student.getEmailAddr(), "jane.smith@school.com");
   EXPECT_EQ(student.getLName(), "Smith");
   EXPECT_EQ(student.getFName(), "Jane");
   EXPECT_EQ(student.getClassPeriod(), 4);
-  EXPECT_EQ(student.getSchool(), "Washington High");
+  EXPECT_EQ(student.getSchool(), AA::School{});
   std::cout << "[PASSED] All setters successfully updated internal member "
                "variables.\n";
 }
@@ -68,7 +68,8 @@ TEST(StudentTest, Setters) {
 // ==========================================
 TEST(StudentTest, NameFormatting) {
   std::cout << "[TESTING] getName() format (Last First)...\n";
-  AA::Student student("", "", "Wayne", "Bruce", 1, "");
+  AA::School s;
+  AA::Student student("", "", "Wayne", "Bruce", 1, s);
 
   EXPECT_EQ(student.getName(), "Wayne Bruce");
   std::cout
@@ -80,7 +81,8 @@ TEST(StudentTest, NameFormatting) {
 // ==========================================
 TEST(StudentTest, TestManagementOperations) {
   std::cout << "[TESTING] Test Management (addTest, removeTest, clear)...\n";
-  AA::Student student("S1", "test@test.com", "Test", "User", 1, "School");
+  AA::School s;
+  AA::Student student("S1", "test@test.com", "Test", "User", 1, s);
 
   DT::Date d1("2026-06-01 10:00:00");
   DT::Date d2("2026-06-02 11:30:00");
@@ -89,12 +91,12 @@ TEST(StudentTest, TestManagementOperations) {
   student.addTest("Final", 88.0f, d2);
 
   ASSERT_EQ(student.getTests().size(), 2);
-  EXPECT_EQ(student.getTests()[0].testName, "Midterm");
-  EXPECT_EQ(student.getTests()[0].grade, 95.5f);
+  EXPECT_EQ(student.getTests()[0].getTestName(), "Midterm");
+  EXPECT_EQ(student.getTests()[0].getGrade(), 95.5f);
 
   student.removeTest("Midterm", d1);
   EXPECT_EQ(student.getTests().size(), 1);
-  EXPECT_EQ(student.getTests()[0].testName, "Final");
+  EXPECT_EQ(student.getTests()[0].getTestName(), "Final");
 
   student.clear();
   EXPECT_EQ(student.getStudentID(), "");
@@ -110,22 +112,23 @@ TEST(StudentTest, ComparisonOperators) {
   std::cout
       << "[TESTING] Comparison operators (`operator==` and `operator<=>`)...\n";
 
-  AA::Student s1("S100", "a@a.com", "Adams", "Alice", 1, "High");
+  AA::School s;
+  AA::Student s1("S100", "a@a.com", "Adams", "Alice", 1, s);
   AA::Student s2("S200", "b@b.com", "Baker", "Bob", 1,
-                 "High");  // Different ID -> evaluates to false for equality
-  AA::Student s3("S200", "c@c.com", "Adams", "Alice", 2, "High");
+                 s);  // Different ID -> evaluates to false for equality
+  AA::Student s3("S200", "c@c.com", "Adams", "Alice", 2, s);
 
+  AA::School b;
   // Equality: matches if class period and student ID are equal
-  AA::Student s1Duplicate("S100", "different@a.com", "Adams", "Alice", 1,
-                          "Different");
+  AA::Student s1Duplicate("S100", "different@a.com", "Adams", "Alice", 1, b);
   EXPECT_TRUE(s1 == s1Duplicate);
   EXPECT_FALSE(s1 == s2);  // Now correctly compares different IDs
 
   // Spaceship operator: sorted by class period first, then name
   EXPECT_TRUE(s1 < s3);  // Period 1 comes before Period 2
 
-  AA::Student sA("S101", "a@a.com", "Adams", "Charlie", 1, "High");
-  AA::Student sB("S102", "b@b.com", "Zack", "Alice", 1, "High");
+  AA::Student sA("S101", "a@a.com", "Adams", "Charlie", 1, s);
+  AA::Student sB("S102", "b@b.com", "Zack", "Alice", 1, s);
   EXPECT_TRUE(sA < sB);  // Same period, Adams Charlie comes before Zack Alice
 
   std::cout << "[PASSED] Comparison operators evaluated correctly.\n";
@@ -136,8 +139,9 @@ TEST(StudentTest, ComparisonOperators) {
 // ==========================================
 TEST(StudentTest, StreamInsertionOperator) {
   std::cout << "[TESTING] Stream Insertion Operator (`operator<<`)...\n";
-  AA::Student student("S123", "student@school.com", "Smith", "John", 3,
-                      "East High");
+  AA::School s;
+  s.setName("East High");
+  AA::Student student("S123", "student@school.com", "Smith", "John", 3, s);
 
   std::ostringstream oss;
   oss << student;
@@ -154,8 +158,8 @@ TEST(StudentTest, StreamInsertionOperator) {
 // ==========================================
 TEST(StudentTest, JsonSerialization) {
   std::cout << "[TESTING] nlohmann/json Intrusive Serialization...\n";
-  AA::Student original("S789", "json@test.com", "Json", "Tester", 5,
-                       "Tech High");
+  AA::School s;
+  AA::Student original("S789", "json@test.com", "Json", "Tester", 5, s);
 
   nlohmann::json j = original;
   AA::Student restored = j.get<AA::Student>();

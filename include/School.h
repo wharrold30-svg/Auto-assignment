@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "nlohmann/json.hpp"
+#include "sql/SSQLS.h"
 
 namespace AA {
 class School {
@@ -30,7 +31,7 @@ class School {
   // setter
   void setName(std::string_view name) { m_name = name; }
   void setAddress(std::string_view address) { m_name = address; }
-  void setGradebook(std::string_view gradebook) { m_name = gradebook; }
+  void setGradebook(std::string_view gradebook) { m_gradebook = gradebook; }
   std::strong_ordering operator<=>(const School& rhs) const {
     if (auto ret{m_name <=> rhs.m_name}; ret != 0) {
       return ret;
@@ -40,6 +41,19 @@ class School {
   bool operator==(const School& rhs) const {
     return (m_name == rhs.m_name) && (m_address == rhs.m_address);
   }
+
+  SSQLS::schools toSSQLS() const {
+    SSQLS::schools row;
+    row.name = m_name;
+    row.address = m_address;
+    row.gradebook = m_gradebook;
+    return row;
+  }
+
+  static School fromSSQLS(const SSQLS::schools& row) {
+    return School(row.name, row.address, row.gradebook);
+  }
+
   NLOHMANN_DEFINE_TYPE_INTRUSIVE(School, m_name, m_address, m_gradebook)
 };  // School
 }  // namespace AA

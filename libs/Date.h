@@ -87,7 +87,8 @@ class Date {
   inline std::string getStr() const { return toStringNoDay(); }
 
   inline std::chrono::system_clock::time_point toTimePoint() const {
-    std::time_t time_t_val = std::mktime(&m_date);
+    std::tm copy = m_date;
+    std::time_t time_t_val = m_isLT ? std::mktime(&copy) : timegm(&copy);
     return std::chrono::system_clock::from_time_t(time_t_val);
   }
 
@@ -115,10 +116,13 @@ class Date {
   // spaceship operator and equal-to operator
   // newer dates are less than older dates; therefore,
   //(lhs < rhs) will be true if lhs is newer than rhs
-  std::partial_ordering operator<=>(const Date& rhs) const {
-    return (*this - rhs) <=> 0.0;
+  std::strong_ordering operator<=>(const Date& rhs) const {
+    return rhs.toTimePoint() <=> toTimePoint();
   }
-  bool operator==(const Date& rhs) const { return (*this - rhs) == 0.0; }
+
+  bool operator==(const Date& rhs) const {
+    return toTimePoint() == rhs.toTimePoint();
+  }
 
   NLOHMANN_DEFINE_TYPE_INTRUSIVE(Date, m_date, m_isLT)
 
