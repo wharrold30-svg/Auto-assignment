@@ -41,7 +41,7 @@ struct adl_serializer<std::tm> {
 namespace DT {
 class Date {
  private:
-  mutable std::tm m_date;
+  mutable std::tm m_date{};
   bool m_isLT{false};
   bool validateDateTime(std::string_view str) const;
 

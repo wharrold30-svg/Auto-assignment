@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <ctime>
 #include <iostream>
 #include <string>
@@ -10,28 +11,29 @@
 
 namespace {
 
-// Custom listener to explicitly announce what is being tested and its result
-class VerbosePartListener : public ::testing::EmptyTestEventListener {
+// ANSI color codes matching Google Test's native palette
+constexpr const char* COLOR_RESET = "\033[0m";
+constexpr const char* COLOR_GREEN = "\033[0;32m";
+constexpr const char* COLOR_RED = "\033[0;31m";
+constexpr const char* COLOR_CYAN = "\033[0;36m";
+
+// Custom listener that runs ALONGSIDE Google Test's native colored printer
+// to announce each part being tested and its pass/fail status.
+class PartReporterListener : public ::testing::EmptyTestEventListener {
  public:
   void OnTestStart(const ::testing::TestInfo& test_info) override {
-    std::cout << "[ TESTING  ] " << test_info.test_suite_name() << " -> "
+    std::cout << COLOR_CYAN << "[ PART     ] " << COLOR_RESET
+              << "Testing: " << test_info.test_suite_name() << "."
               << test_info.name() << "\n";
-  }
-
-  void OnTestPartResult(
-      const ::testing::TestPartResult& test_part_result) override {
-    if (test_part_result.failed()) {
-      std::cout << "  [ FAILED ] Failure in " << test_part_result.file_name()
-                << ":" << test_part_result.line_number() << "\n"
-                << test_part_result.summary() << "\n";
-    }
   }
 
   void OnTestEnd(const ::testing::TestInfo& test_info) override {
     if (test_info.result()->Passed()) {
-      std::cout << "[ PASSED   ] " << test_info.name() << "\n\n";
+      std::cout << COLOR_GREEN << "[ RESULT   ] " << COLOR_RESET
+                << test_info.name() << " -> PASSED\n\n";
     } else {
-      std::cout << "[ FAILED   ] " << test_info.name() << "\n\n";
+      std::cout << COLOR_RED << "[ RESULT   ] " << COLOR_RESET
+                << test_info.name() << " -> FAILED\n\n";
     }
   }
 };
@@ -86,15 +88,17 @@ TEST_F(GradeRecordTest, DefaultConstructorInitialization) {
   SCOPED_TRACE("Testing Default Constructor baseline state");
 
   AA::GradeRecord defaultRecord;
+  DT::Date defaultDate;
 
   EXPECT_TRUE(defaultRecord.getTestID().empty());
   EXPECT_TRUE(defaultRecord.getTestName().empty());
   EXPECT_TRUE(defaultRecord.getSubject().empty());
   EXPECT_TRUE(defaultRecord.getStatus().empty());
+
   EXPECT_TRUE(defaultRecord.getDueDate().empty());
   EXPECT_TRUE(defaultRecord.getSubmissionDate().empty());
-  // Uncomment if m_grade is default-initialized to 0 in GradeRecord.h/.cpp:
-  // EXPECT_EQ(defaultRecord.getGrade(), 0);
+  EXPECT_EQ(defaultRecord.getDueDate(), defaultDate);
+  EXPECT_EQ(defaultRecord.getSubmissionDate(), defaultDate);
 }
 
 // ============================================================================
@@ -200,15 +204,14 @@ TEST_F(GradeRecordTest, SpaceshipOperatorComparesDueDate) {
 
 }  // namespace
 
-// Custom main to register the verbose listener while suppressing default noisy
-// output
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
+  // Append PartReporterListener WITHOUT removing default_result_printer()
+  // so Google Test's native colored output and summary remain active.
   ::testing::TestEventListeners& listeners =
       ::testing::UnitTest::GetInstance()->listeners();
-  delete listeners.Release(listeners.default_result_printer());
-  listeners.Append(new VerbosePartListener);
+  listeners.Append(new PartReporterListener);
 
   return RUN_ALL_TESTS();
 }
