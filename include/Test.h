@@ -261,6 +261,7 @@ class Test {
   void setDescription(std::string_view descr) { m_description = descr; }
   void setSubject(std::string_view subj) { m_subject = subj; }
   void setLevel(const std::size_t level) { m_level = level; }
+  void setTestID(std::string_view id) { m_testID = id; }
   void setTest(const TestVec& tVec) { m_test = tVec; }
   bool setStudentTest(const std::shared_ptr<Student>& student,
                       const std::vector<std::string>& test,

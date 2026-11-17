@@ -3,6 +3,7 @@
 #include <string>
 #include <string_view>
 
+#include "GradeRecord.h"
 #include "OpenTest.h"
 #include "School.h"
 #include "Student.h"
@@ -82,6 +83,21 @@ class Data : public IDataRepository {
 
   bool loadTestsForTeacher(const std::string& teacherId,
                            std::vector<AA::Test>& out_tests);
+
+  bool loadTestsPaginated(int limit, int offset,
+                          std::vector<AA::Test>& out_tests);
+
+  bool getStudentAssignments(const std::string& studentId,
+                             std::vector<GradeRecord>& out_assignments);
+
+  bool removeStudentFromClass(const std::string& studentId,
+                              const std::string& teacherId, int classPeriod);
+
+  bool removeStudentFromSchoolCompletely(const std::string& studentId,
+                                         const std::string& schoolName);
+
+  bool transferStudentSchool(const std::string& studentId,
+                             const std::string& newSchoolName);
 };  // Data
 }  // namespace Data
 }  // namespace AA

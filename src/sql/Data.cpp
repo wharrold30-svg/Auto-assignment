@@ -1086,3 +1086,210 @@ bool AA::Data::Data::loadTestsForTeacher(const std::string& teacherId,
     return false;
   }
 }
+
+// this allow gettingknly so many test at a time
+bool AA::Data::Data::loadTestsPaginated(int limit, int offset,
+                                        std::vector<AA::Test>& out_tests) {
+  out_tests.clear();
+
+  if (!m_conn.connected()) {
+    AA::SaveErrorLog(
+        "Database connection is inactive while trying to load paginated "
+        "tests.");
+    return false;
+  }
+
+  try {
+    // Construct the query with LIMIT and OFFSET for pagination
+    mysqlpp::Query query = m_conn.query();
+    query << "SELECT t.test_id, t.name, t.subject, t.description, "
+             "t.creation_date "
+          << "FROM tests t "
+          << "ORDER BY t.creation_date DESC "
+          << "LIMIT " << limit << " OFFSET " << offset;
+
+    mysqlpp::StoreQueryResult res = query.store();
+    if (!res) {
+      return false;
+    }
+
+    // Loop through the results and build your Test objects
+    for (size_t i = 0; i < res.num_rows(); ++i) {
+      AA::Test record;
+      record.setTestID(res[i]["test_id"].c_str());
+      // Set other fields here (name, subject, description, creation_date, etc.)
+      record.setTestID(res[i]["test_id"].c_str());
+
+      record.setTestName(res[i]["name"].c_str());
+
+      record.setSubject(res[i]["subject"].c_str());
+
+      record.setDescription(res[i]["description"].c_str());
+      record.setSentDate(DT::Date{res[i]["sent_date"].c_str()});
+      out_tests.push_back(record);
+    }
+
+    return true;
+  } catch (const mysqlpp::Exception& e) {
+    AA::SaveErrorLog(std::string("Exception loading paginated tests: ") +
+                     e.what());
+    return false;
+  }
+}
+
+bool AA::Data::Data::getStudentAssignments(
+    const std::string& studentId, std::vector<GradeRecord>& out_assignments) {
+  out_assignments.clear();
+
+  if (!m_conn.connected()) {
+    AA::SaveErrorLog(
+        "Database connection is inactive while trying to load student "
+        "assignments.");
+    return false;
+  }
+
+  try {
+    mysqlpp::Query query = m_conn.query();
+    query
+        << "SELECT ot.test_id, ot.name AS test_name, ot.subject, ot.due_date, "
+        << "       sot.submission_date, sot.score, sot.status "
+        << "FROM student_open_test_log sot "
+        << "JOIN open_tests ot ON sot.open_test_id = ot.test_id "
+        << "WHERE sot.student_id = " << mysqlpp::quote << studentId
+        << " ORDER BY ot.due_date ASC";  // Order by due date so
+                                         // pending/upcoming tests are front and
+                                         // center
+
+    mysqlpp::StoreQueryResult res = query.store();
+    if (!res) {
+      return false;
+    }
+
+    for (size_t i = 0; i < res.num_rows(); ++i) {
+      GradeRecord record;
+      record.setTestID(res[i]["test_id"].c_str());
+      record.setTestName(res[i]["test_name"].c_str());
+      record.setSubject(res[i]["subject"].c_str());
+
+      // Due date is always present for open tests
+      if (!res[i]["due_date"].is_null()) {
+        record.setDueDate(DT::Date{res[i]["due_date"].c_str()});
+      }
+
+      // Submission date and score might be null if pending/unsubmitted
+      if (!res[i]["submission_date"].is_null()) {
+        record.setSubmissionDate(DT::Date{res[i]["submission_date"].c_str()});
+      }
+      if (!res[i]["score"].is_null()) {
+        record.setGrade(res[i]["grade"]);
+      }
+
+      // e.g., "pending", "completed", "not turned in"
+      record.setStatus(res[i]["status"].c_str());
+
+      out_assignments.push_back(record);
+    }
+
+    return true;
+  } catch (const mysqlpp::Exception& e) {
+    AA::SaveErrorLog(std::string("Exception loading student assignments: ") +
+                     e.what());
+    return false;
+  }
+}
+
+bool AA::Data::Data::removeStudentFromClass(const std::string& studentId,
+                                            const std::string& teacherId,
+                                            int classPeriod) {
+  if (!m_conn.connected()) {
+    AA::SaveErrorLog(
+        "Database connection is inactive while trying to remove student from "
+        "class.");
+    return false;
+  }
+
+  try {
+    mysqlpp::Query query = m_conn.query();
+    query << "DELETE FROM teacher_roster "
+          << "WHERE student_id = " << mysqlpp::quote << studentId
+          << " AND teacher_id = " << mysqlpp::quote << teacherId
+          << " AND class_period = " << classPeriod;
+
+    query.execute();
+    return true;
+  } catch (const mysqlpp::Exception& e) {
+    AA::SaveErrorLog(
+        std::string("Exception removing student from class roster: ") +
+        e.what());
+    return false;
+  }
+}
+
+bool AA::Data::Data::removeStudentFromSchoolCompletely(
+    const std::string& studentId, const std::string& schoolName) {
+  if (!m_conn.connected()) {
+    AA::SaveErrorLog(
+        "Database connection is inactive while trying to remove student from "
+        "school.");
+    return false;
+  }
+
+  try {
+    // Deleting the student from the students table where they belong to this
+    // school. Thanks to ON DELETE CASCADE in your schema, this automatically
+    // deletes all matching rows in teacher_roster, student_open_test_log, and
+    // student_tests!
+    mysqlpp::Query query = m_conn.query();
+    query << "DELETE FROM students "
+          << "WHERE student_id = " << mysqlpp::quote << studentId
+          << " AND school_name = " << mysqlpp::quote << schoolName;
+
+    query.execute();
+    return true;
+  } catch (const mysqlpp::Exception& e) {
+    AA::SaveErrorLog(std::string("Exception removing student from school: ") +
+                     e.what());
+    return false;
+  }
+}
+
+bool AA::Data::Data::transferStudentSchool(const std::string& studentId,
+                                           const std::string& newSchoolName) {
+  if (!m_conn.connected()) {
+    AA::SaveErrorLog(
+        "Database connection is inactive while trying to transfer student.");
+    return false;
+  }
+
+  try {
+    // Use a transaction so all steps succeed or roll back together
+    // Note: MySQL++ transaction handling can vary, but standard query execution
+    // works well.
+
+    // Step 1: Remove the student from all previous teacher rosters
+    // (since classes are tied to the old school's teachers)
+    mysqlpp::Query rosterQuery = m_conn.query();
+    rosterQuery << "DELETE FROM teacher_roster WHERE student_id = "
+                << mysqlpp::quote << studentId;
+    rosterQuery.execute();
+
+    // Step 2: Clear old open test logs tied to the old school/teachers
+    mysqlpp::Query testLogQuery = m_conn.query();
+    testLogQuery << "DELETE FROM student_open_test_log WHERE student_id = "
+                 << mysqlpp::quote << studentId;
+    testLogQuery.execute();
+
+    // Step 3: Update the student's school_name to the new school
+    mysqlpp::Query updateQuery = m_conn.query();
+    updateQuery << "UPDATE students SET school_name = " << mysqlpp::quote
+                << newSchoolName << " WHERE student_id = " << mysqlpp::quote
+                << studentId;
+    updateQuery.execute();
+
+    return true;
+  } catch (const mysqlpp::Exception& e) {
+    AA::SaveErrorLog(std::string("Exception during student school transfer: ") +
+                     e.what());
+    return false;
+  }
+}
