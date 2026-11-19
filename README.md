@@ -113,3 +113,18 @@ int main() {
     return 0;
 }
 
+
+// 1. Create student bound to your connection
+Student student(m_conn);
+student.save(); // Uses stored m_conn automatically!
+
+// 2. Read an existing student by string ID (static method still takes connection)
+Student fetchedStudent(m_conn);
+Student::read(m_conn, "student_id", "STU123", fetchedStudent);
+
+// 3. Update the student (uses stored m_conn automatically!)
+fetchedStudent.update("student_id", "STU123");
+
+// 4. Remove a Test Question by integer ID
+TestQuestion::remove(m_conn, "id", 42);
+

@@ -30,7 +30,7 @@ class School {
 
   // setter
   void setName(std::string_view name) { m_name = name; }
-  void setAddress(std::string_view address) { m_name = address; }
+  void setAddress(std::string_view address) { m_address = address; }
   void setGradebook(std::string_view gradebook) { m_gradebook = gradebook; }
   std::strong_ordering operator<=>(const School& rhs) const {
     if (auto ret{m_name <=> rhs.m_name}; ret != 0) {

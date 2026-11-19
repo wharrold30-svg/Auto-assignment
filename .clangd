@@ -1,2 +1,2 @@
 CompileFlags:
-  Add: [-std=c++23, -Iinclude, -Ilibs, -Iexternal/include, -I/usr/include/mysql]
+  Add: [-std=c++23, -Iinclude, -Ilibs, -Iexternal/include, -I/usr/include/mysql, -Itests/fakes]
