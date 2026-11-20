@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
 }
 
 
-//////////////////////////////
+//////////////////////////////////////////////// 
 Using TimeManager:
 
 #include <iostream>
@@ -113,6 +113,7 @@ int main() {
     return 0;
 }
 
+////////////////////////////////////////////////
 
 // 1. Create student bound to your connection
 Student student(m_conn);
@@ -127,4 +128,294 @@ fetchedStudent.update("student_id", "STU123");
 
 // 4. Remove a Test Question by integer ID
 TestQuestion::remove(m_conn, "id", 42);
+
+////////////////////////////////////////////////
+
+## SQL Bridge Objects (`AA::Data`)
+
+All bridge classes inherit from `AA::Data::DataBase<Bridge, Derived, IdType>` (defaulting `IdType` to `std::string`) and are non-copyable / non-movable (`delete` copy/move constructors and assignment operators).
+
+### Method Reference
+
+| Class | Method | Purpose |
+| :--- | :--- | :--- |
+| `DataBase` | `getTableName()` | Returns the target SQL table name |
+| `DataBase` | `save(model)` | Inserts a model via `toSSQLS()` |
+| `DataBase` | `update(model, idColumn, idValue)` | Updates a row matching `idColumn = idValue` |
+| `DataBase` | `read(idColumn, idValue, out_model)` | Loads a single row into `out_model` |
+| `DataBase` | `remove(idColumn, idValue)` | Deletes rows matching `idColumn = idValue` |
+| `gradebook` | `loadAllGradeBooks(out_gradeBooks)` | Loads all `(name, Gradebook)` pairs |
+| `gradebook` | `loadGradeBookForSchool(schoolName, out_gradeBook)` | Loads the gradebook assigned to a school |
+| `gradebook` | `updateGradeBookForSchool(schoolName, gradeBook)` | Updates a school's gradebook |
+| `school` | `transferStudentSchool(studentId, newSchoolName)` | Moves a student to a new school |
+| `school` | `removeStudentFromSchoolCompletely(studentId, schoolName)` | Removes a student from a matching school and related records |
+| `school` | `transferTeacherSchool(teacherId, newSchoolName)` | Moves a teacher to a new school |
+| `school` | `removeTeacherFromSchool(teacherId)` | Detaches a teacher from their school |
+| `school` | `loadTeachersForSchool(schoolName, out_teachers)` | Loads teachers belonging to a school |
+| `school` | `loadStudentsForSchool(schoolName, out_students)` | Loads students belonging to a school |
+| `student` | `loadStudentSchedule(studentId, out_schedule)` | Loads `(teacherId, classPeriod)` tuples for a student |
+| `student` | `loadOpenTestsForStudent(studentId, out_tests)` | Loads open tests assigned to a student |
+| `student` | `getStudentAssignments(studentId, out_assignments)` | Loads `GradeRecord` entries for a student |
+| `student` | `returnStudentTest(...)` | Records a student's test submission, score/grade, and status |
+| `student` | `loadStudentByEmail(email, out_student)` | Finds a student by email address |
+| `teacher` | `loadCredentials(teacherId, out_salt, out_password)` | Loads a teacher's salt and password hash |
+| `teacher` | `saveCredentials(teacherId, salt, password)` | Saves a teacher's salt and password hash |
+| `teacher` | `loadTestsForTeacher(teacherId, out_tests)` | Loads tests authored by a teacher |
+| `teacher` | `assignOpenTestToStudent(studentId, openTestId)` | Assigns an open test to one student |
+| `teacher` | `assignOpenTestToMultipleStudents(studentIds, openTestId)` | Assigns an open test to multiple students |
+| `teacher` | `loadOpenTestsForTeacher(teacherId, out_tests)` | Loads open tests created by a teacher |
+| `teacher` | `loadTeacherRoster(teacherId, out_roster)` | Loads `(studentId, classPeriod)` pairs for a teacher |
+| `teacher` | `saveTeacherRoster(teacherId, studentPeriodPairs)` | Replaces/saves a teacher's roster pairs |
+| `teacher` | `enrollStudentInClass(teacherId, studentId, classPeriod)` | Enrolls a student in a teacher's class period |
+| `teacher` | `removeStudentFromClass(teacherId, studentId, classPeriod)` | Removes a student from a teacher's class period |
+| `teacher` | `loadTeacherByEmail(email, out_teacher)` | Finds a teacher by email address |
+| `teacher` | `loadRosterForPeriod(teacherId, classPeriod, out_studentIds)` | Loads student IDs for a teacher and specific period |
+| `test` | `saveOpenTest(openTest)` | Saves an `AA::OpenTest` record |
+| `test` | `loadOpenTestsByDateRange(startDate, endDate, out_tests)` | Loads open tests within a date range |
+| `test` | `loadTestsPaginated(limit, offset, out_tests)` | Loads a slice of tests with pagination |
+| `test` | `saveTestQuestions(testId, questions)` | Saves question/answer items (`TestVec`) for a test |
+| `test` | `saveTestWithQuestions(test)` | Saves a test along with its questions |
+| `test` | `loadTestQuestions(testId, out_questions)` | Loads questions for a test |
+| `test` | `removeTestQuestions(testId)` | Removes questions for a test |
+| `test` | `loadTestWithQuestions(testId, out_test)` | Loads a test hydrated with its questions |
+
+---
+
+### Usage Examples
+
+### Base CRUD Operations (`AA::Data::DataBase`)
+
+Every bridge exposes `getTableName()`, `save()`, `update()`, `read()`, and `remove()` via `DataBase`:
+
+```cpp
+#include <mysql++/mysql++.h>
+#include <iostream>
+#include "Gradebook.h"
+#include "sql/gradebook.h"
+
+void baseCrudExample(mysqlpp::Connection& conn) {
+  AA::Data::gradebook gbBridge(conn);
+  std::cout << "Table: " << gbBridge.getTableName() << '\n';  // "gradebooks"
+
+  AA::Gradebook gb;
+  gb.setName("Canvas");
+  gb.setURL("[https://canvas.example.edu](https://canvas.example.edu)");
+  gb.setPostTemp("post_canvas.py");
+
+  // INSERT via model.toSSQLS()
+  gbBridge.save(gb);
+
+  // UPDATE via model.toSSQLS() where idColumn == idValue
+  gb.setURL("[https://updated.canvas.example.edu](https://updated.canvas.example.edu)");
+  gbBridge.update(gb, "name", "Canvas");
+
+  // READ into out_model via fromSSQLS()
+  AA::Gradebook loaded;
+  if (gbBridge.read("name", "Canvas", loaded)) {
+    std::cout << loaded.getURL() << '\n';
+  }
+
+  // DELETE where idColumn == idValue
+  gbBridge.remove("name", "Canvas");
+}
+////////////////////////////////////////////////
+
+#include <mysql++/mysql++.h>
+#include <utility>
+#include <vector>
+#include "Gradebook.h"
+#include "sql/gradebook.h"
+
+void gradebookBridgeExample(mysqlpp::Connection& conn) {
+  AA::Data::gradebook gbBridge(conn);
+
+  AA::Gradebook gb;
+  gb.setName("Canvas");
+  gb.setURL("[https://canvas.example.edu](https://canvas.example.edu)");
+  gb.setPostTemp("post_canvas.py");
+
+  // Update the gradebook associated with a school
+  gbBridge.updateGradeBookForSchool("North High", gb);
+
+  // Load the gradebook for a specific school
+  AA::Gradebook schoolGb;
+  gbBridge.loadGradeBookForSchool("North High", schoolGb);
+
+  // Load all (name, Gradebook) pairs
+  std::vector<std::pair<std::string, AA::Gradebook>> allGradebooks;
+  gbBridge.loadAllGradeBooks(allGradebooks);
+}
+
+////////////////////////////////////////////////
+
+#include <mysql++/mysql++.h>
+#include <vector>
+#include "Student.h"
+#include "Teacher.h"
+#include "sql/school.h"
+
+void schoolBridgeExample(mysqlpp::Connection& conn) {
+  AA::Data::school schoolBridge(conn);
+
+  // Load all teachers or students at a school
+  std::vector<AA::Teacher> teachers;
+  schoolBridge.loadTeachersForSchool("North High", teachers);
+
+  std::vector<AA::Student> students;
+  schoolBridge.loadStudentsForSchool("North High", students);
+
+  // Transfer a teacher or student to another school
+  schoolBridge.transferTeacherSchool("T100", "South High");
+  schoolBridge.transferStudentSchool("S100", "South High");
+
+  // Remove a teacher from their school
+  schoolBridge.removeTeacherFromSchool("T100");
+
+  // Remove a student completely only if currently in schoolName
+  schoolBridge.removeStudentFromSchoolCompletely("S100", "South High");
+}
+
+////////////////////////////////////////////////
+
+#include <mysql++/mysql++.h>
+#include <string>
+#include <tuple>
+#include <vector>
+#include "Date.h"
+#include "GradeRecord.h"
+#include "OpenTest.h"
+#include "Student.h"
+#include "sql/student.h"
+
+void studentBridgeExample(mysqlpp::Connection& conn) {
+  AA::Data::student studentBridge(conn);
+
+  // Look up a student by email address
+  AA::Student found;
+  studentBridge.loadStudentByEmail("aturing@north.edu", found);
+
+  // Load (teacherId, classPeriod) tuples for a student
+  std::vector<std::tuple<std::string, unsigned int>> schedule;
+  studentBridge.loadStudentSchedule("S100", schedule);
+
+  // Load open tests assigned to the student
+  std::vector<AA::OpenTest> openTests;
+  studentBridge.loadOpenTestsForStudent("S100", openTests);
+
+  // Submit/return a student test (defaults: returnTest="", wrongAnswers="", grade=0.0f)
+  const DT::Date submittedAt("2026-11-18 14:30:00");
+  studentBridge.returnStudentTest("S100", 42, submittedAt, 90.0, "Submitted",
+                                  R"(["4"])", R"([])", 90.0f);
+
+  // Load grade records / assignments for the student
+  std::vector<AA::GradeRecord> assignments;
+  studentBridge.getStudentAssignments("S100", assignments);
+}
+
+////////////////////////////////////////////////
+
+#include <mysql++/mysql++.h>
+#include <string>
+#include <utility>
+#include <vector>
+#include "OpenTest.h"
+#include "Teacher.h"
+#include "Test.h"
+#include "sql/teacher.h"
+
+void teacherBridgeExample(mysqlpp::Connection& conn) {
+  AA::Data::teacher teacherBridge(conn);
+
+  // Save and load teacher credentials (salt + password hash)
+  teacherBridge.saveCredentials("T100", "random_salt", "hashed_password");
+  std::string salt;
+  std::string password;
+  teacherBridge.loadCredentials("T100", salt, password);
+
+  // Find a teacher by email
+  AA::Teacher found;
+  teacherBridge.loadTeacherByEmail("ghopper@north.edu", found);
+
+  // Enroll, remove, save, or load roster entries ((studentId, classPeriod))
+  teacherBridge.enrollStudentInClass("T100", "S100", 2);
+  teacherBridge.removeStudentFromClass("T100", "S100", 2);
+
+  const std::vector<std::pair<std::string, unsigned int>> rosterPairs = {
+      {"S100", 2}, {"S101", 2}};
+  teacherBridge.saveTeacherRoster("T100", rosterPairs);
+
+  std::vector<std::pair<std::string, unsigned int>> loadedRoster;
+  teacherBridge.loadTeacherRoster("T100", loadedRoster);
+
+  std::vector<std::string> period2Students;
+  teacherBridge.loadRosterForPeriod("T100", 2, period2Students);
+
+  // Load tests and open tests belonging to the teacher
+  std::vector<AA::Test> tests;
+  teacherBridge.loadTestsForTeacher("T100", tests);
+
+  std::vector<AA::OpenTest> openTests;
+  teacherBridge.loadOpenTestsForTeacher("T100", openTests);
+
+  // Assign an open test (by int ID) to one or multiple students
+  teacherBridge.assignOpenTestToStudent("S100", 42);
+  teacherBridge.assignOpenTestToMultipleStudents({"S100", "S101"}, 42);
+}
+
+////////////////////////////////////////////////
+
+#include <mysql++/mysql++.h>
+#include <string>
+#include <vector>
+#include "Date.h"
+#include "OpenTest.h"
+#include "Test.h"
+#include "sql/test.h"
+
+void testBridgeExample(mysqlpp::Connection& conn) {
+  AA::Data::test testBridge(conn);
+
+  AA::Test quiz;
+  quiz.setTestID("TEST_01");
+  quiz.setTestName("Logic Quiz");
+
+  AA::QandA q1;
+  q1.setQuestion("2 + 2?");
+  q1.setAnswer("4");
+  TestVec questions = {q1};
+
+  // Save questions or a full test with its questions
+  testBridge.saveTestQuestions("TEST_01", questions);
+  testBridge.saveTestWithQuestions(quiz);
+
+  // Load questions or a hydrated AA::Test with questions
+  TestVec loadedQuestions;
+  testBridge.loadTestQuestions("TEST_01", loadedQuestions);
+
+  AA::Test loadedQuiz;
+  testBridge.loadTestWithQuestions("TEST_01", loadedQuiz);
+
+  // Paginated test loading
+  std::vector<AA::Test> page;
+  testBridge.loadTestsPaginated(/*limit=*/10, /*offset=*/0, page);
+
+  // Save an open test and query open tests in a date range
+  AA::OpenTest ot;
+  ot.setID(42);
+  ot.setTestID("TEST_01");
+  ot.setTeacherID("T100");
+  ot.setCreationDate(DT::Date("2026-11-18 09:00:00"));
+  ot.setDueDate(DT::Date("2026-11-25 23:59:00"));
+  ot.setDuration(60);
+  ot.setStatus("Open");
+  testBridge.saveOpenTest(ot);
+
+  std::vector<AA::OpenTest> rangedOpenTests;
+  testBridge.loadOpenTestsByDateRange(DT::Date("2026-11-01 00:00:00"),
+                                      DT::Date("2026-11-30 23:59:00"),
+                                      rangedOpenTests);
+
+  // Remove questions for a test
+  testBridge.removeTestQuestions("TEST_01");
+}
 
