@@ -4,6 +4,7 @@
 #include <mysql++/mysql++.h>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "OpenTest.h"
@@ -33,6 +34,8 @@ class teacher : public DataBase<teacher, AA::Teacher> {
   bool loadTestsForTeacher(const std::string& teacherId,
                            std::vector<AA::Test>& out_tests);
 
+  bool assignOpenTestToStudent(const std::string& studentId, int openTestId);
+
   bool assignOpenTestToMultipleStudents(
       const std::vector<std::string>& studentIds, int openTestId);
 
@@ -47,6 +50,22 @@ class teacher : public DataBase<teacher, AA::Teacher> {
       const std::string& teacherId,
       const std::vector<std::pair<std::string, unsigned int>>&
           studentPeriodPairs);
+
+  bool enrollStudentInClass(const std::string& teacherId,
+                            const std::string& studentId,
+                            unsigned int classPeriod);
+
+  bool removeStudentFromClass(const std::string& teacherId,
+                              const std::string& studentId,
+                              unsigned int classPeriod);
+
+  bool loadTeacherByEmail(const std::string& email,
+                          AA::Teacher& out_teacher) const;
+
+  bool loadRosterForPeriod(const std::string& teacherId,
+                           unsigned int classPeriod,
+                           std::vector<std::string>& out_studentIds) const;
+
 };  // teacher
 }  // namespace Data
 }  // namespace AA

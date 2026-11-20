@@ -1,261 +1,265 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
+#include "Date.h"
+#include "GradeRecord.h"
 #include "Gradebook.h"
 #include "OpenTest.h"
 #include "School.h"
+#include "Student.h"
 #include "Teacher.h"
 #include "Test.h"
-#include "fakes/FakeDataBase.h"
 #include "fakes/FakeGradebook.h"
 #include "fakes/FakeSchool.h"
+#include "fakes/FakeStore.h"
+#include "fakes/FakeStudent.h"
 #include "fakes/FakeTeacher.h"
-
+#include "fakes/FakeTest.h"
 namespace {
 
-struct DummyRecord {
-  int id = 0;
-  std::string label;
-  bool operator==(const DummyRecord& other) const = default;
-};
-
-// Adjust these setters/getters if your AA:: domain classes use different names.
-AA::Gradebook makeGradebook(const std::string& name, const std::string& url,
-                            const std::string& script = "post_grades()") {
-  AA::Gradebook gb;
-  gb.setName(name);
-  gb.setURL(url);
-  gb.setPostTemp(script);
-  return gb;
-}
-
-AA::School makeSchool(const std::string& name, const std::string& address,
-                      const std::string& gradebook = "Canvas") {
-  AA::School s;
-  s.setName(name);
-  s.setAddress(address);
-  s.setGradebook(gradebook);
-  return s;
-}
-
-AA::Teacher makeTeacher(const std::string& id, const std::string& firstName,
-                        const std::string& lastName, const std::string& email,
-                        const std::string& schoolName) {
-  AA::School s{};
-  s.setName(schoolName);
-  AA::Teacher t;
-  t.setTeacherID(id);
-  t.setFName(firstName);
-  t.setLName(lastName);
-  t.setEmailAddr(email);
-  t.setSchool(s);
-  return t;
-}
-
-class AutoAssignmentFakesSuite : public ::testing::Test {
+class FakesSuiteTest : public ::testing::Test {
  protected:
-  AA::Data::Fakes::gradebook gradebookStore;
-  AA::Data::Fakes::school schoolStore;
-  AA::Data::Fakes::teacher teacherStore;
+  AA::Fake::Store store;
+  AA::Fake::FakeTeacher teacherFake{store};
+  AA::Fake::FakeStudent studentFake{store};
+  AA::Fake::FakeSchool schoolFake{store};
+  AA::Fake::FakeGradebook gradebookFake{store};
+  AA::Fake::FakeTest testFake{store};
 
   void SetUp() override {
-    gradebookStore.clear();
-    schoolStore.clear();
-    teacherStore.clear();
+    AA::Gradebook gbA;
+    gbA.setName("Canvas");
+    gbA.setURL("https://canvas.example.edu");
+    gbA.setPostTemp("post_canvas.py");
+    store.gradebooks["Canvas"] = gbA;
+
+    AA::Gradebook gbB;
+    gbB.setName("PowerSchool");
+    gbB.setURL("https://ps.example.edu");
+    gbB.setPostTemp("post_ps.py");
+    store.gradebooks["PowerSchool"] = gbB;
+
+    AA::School northHigh;
+    northHigh.setName("North High");
+    northHigh.setAddress("100 North St");
+    northHigh.setGradebook("Canvas");
+    store.schools["North High"] = northHigh;
+
+    AA::School southHigh;
+    southHigh.setName("South High");
+    southHigh.setAddress("200 South Ave");
+    southHigh.setGradebook("PowerSchool");
+    store.schools["South High"] = southHigh;
+
+    AA::Teacher t1;
+    t1.setTeacherID("T100");
+    t1.setFName("Grace");
+    t1.setLName("Hopper");
+    t1.setEmailAddr("ghopper@north.edu");
+    t1.setSchool(northHigh);
+    store.teachers["T100"] = t1;
+
+    AA::Student s1;
+    s1.setStudentID("S100");
+    s1.setFName("Alan");
+    s1.setLName("Turing");
+    s1.setEmailAddr("aturing@north.edu");
+    s1.setClassPeriod(2);
+    s1.setSchool(northHigh);
+    store.students["S100"] = s1;
+
+    AA::Student s2;
+    s2.setStudentID("S101");
+    s2.setFName("Ada");
+    s2.setLName("Lovelace");
+    s2.setEmailAddr("alovelace@north.edu");
+    s2.setClassPeriod(2);
+    s2.setSchool(northHigh);
+    store.students["S101"] = s2;
   }
 };
 
-// --- FakeDataBase Direct Contract Tests ---
+TEST_F(FakesSuiteTest, LoadsTeachersAndStudentsForSchool) {
+  std::vector<AA::Teacher> teachers;
+  ASSERT_TRUE(schoolFake.loadTeachersForSchool("North High", teachers));
+  ASSERT_EQ(teachers.size(), 1U);
+  EXPECT_EQ(teachers[0].getTeacherID(), "T100");
 
-TEST(FakeDataBaseTest, CrudContractWithIntegerKey) {
-  AA::Data::Fakes::FakeDataBase<DummyRecord, int> store(
-      "dummy_records", [](const DummyRecord& r) { return r.id; });
+  std::vector<AA::Student> students;
+  ASSERT_TRUE(schoolFake.loadStudentsForSchool("North High", students));
+  EXPECT_EQ(students.size(), 2U);
 
-  EXPECT_EQ(store.getTableName(), "dummy_records");
-  EXPECT_EQ(store.size(), 0u);
+  std::vector<AA::Student> emptyStudents;
+  ASSERT_TRUE(schoolFake.loadStudentsForSchool("South High", emptyStudents));
+  EXPECT_TRUE(emptyStudents.empty());
 
-  const DummyRecord rec1{1, "first"};
-  EXPECT_TRUE(store.save(rec1));
-  EXPECT_EQ(store.size(), 1u);
-
-  // Duplicate ID should fail and keep original value
-  EXPECT_FALSE(store.save(DummyRecord{1, "duplicate"}));
-
-  DummyRecord out;
-  ASSERT_TRUE(store.read("id", 1, out));
-  EXPECT_EQ(out, rec1);
-
-  // Update existing record
-  EXPECT_TRUE(store.update(DummyRecord{1, "updated"}, "id", 1));
-  ASSERT_TRUE(store.read("id", 1, out));
-  EXPECT_EQ(out.label, "updated");
-
-  // Updating, reading, or removing a missing ID returns false
-  EXPECT_FALSE(store.update(DummyRecord{99, "missing"}, "id", 99));
-  EXPECT_FALSE(store.read("id", 99, out));
-  EXPECT_FALSE(store.remove("id", 99));
-
-  // Remove existing record
-  EXPECT_TRUE(store.remove("id", 1));
-  EXPECT_EQ(store.size(), 0u);
-  EXPECT_FALSE(store.read("id", 1, out));
+  EXPECT_FALSE(schoolFake.loadTeachersForSchool("", teachers));
+  EXPECT_FALSE(schoolFake.loadStudentsForSchool("", students));
 }
 
-// --- Gradebook CRUD Tests ---
+TEST_F(FakesSuiteTest, TransfersAndRemovesTeacherFromSchool) {
+  ASSERT_TRUE(teacherFake.enrollStudentInClass("T100", "S100", 2));
+  ASSERT_TRUE(schoolFake.transferTeacherSchool("T100", "South High"));
 
-TEST_F(AutoAssignmentFakesSuite, GradebookSaveReadUpdateRemove) {
-  AA::Gradebook gb = makeGradebook("PowerSchool", "https://ps.example.edu",
-                                   "syncPowerSchool()");
+  std::vector<AA::Teacher> northTeachers;
+  ASSERT_TRUE(schoolFake.loadTeachersForSchool("North High", northTeachers));
+  EXPECT_TRUE(northTeachers.empty());
 
-  EXPECT_EQ(gradebookStore.getTableName(), "gradebooks");
-  EXPECT_TRUE(gradebookStore.save(gb));
-  EXPECT_FALSE(gradebookStore.save(gb));  // Duplicate primary key rejected
+  std::vector<AA::Teacher> southTeachers;
+  ASSERT_TRUE(schoolFake.loadTeachersForSchool("South High", southTeachers));
+  ASSERT_EQ(southTeachers.size(), 1U);
+  EXPECT_EQ(southTeachers[0].getSchool().getName(), "South High");
 
-  AA::Gradebook loaded;
-  ASSERT_TRUE(gradebookStore.read("name", "PowerSchool", loaded));
-  EXPECT_EQ(loaded.getName(), "PowerSchool");
-  EXPECT_EQ(loaded.getURL(), "https://ps.example.edu");
+  ASSERT_TRUE(schoolFake.removeTeacherFromSchool("T100"));
+  EXPECT_TRUE(store.teachers["T100"].getSchool().getName().empty());
 
-  AA::Gradebook updated =
-      makeGradebook("PowerSchool", "https://ps-v2.example.edu", "syncV2()");
-  EXPECT_TRUE(gradebookStore.update(updated, "name", "PowerSchool"));
-
-  AA::Gradebook reloaded;
-  ASSERT_TRUE(gradebookStore.read("name", "PowerSchool", reloaded));
-  EXPECT_EQ(reloaded.getURL(), "https://ps-v2.example.edu");
-
-  EXPECT_TRUE(gradebookStore.remove("name", "PowerSchool"));
-  EXPECT_FALSE(gradebookStore.remove("name", "PowerSchool"));
-
-  AA::Gradebook missing;
-  EXPECT_FALSE(gradebookStore.read("name", "PowerSchool", missing));
+  std::vector<std::pair<std::string, unsigned int>> roster;
+  ASSERT_TRUE(teacherFake.loadTeacherRoster("T100", roster));
+  EXPECT_TRUE(roster.empty());
 }
 
-// --- School CRUD Tests ---
+TEST_F(FakesSuiteTest, TransfersAndRemovesStudentCompletely) {
+  ASSERT_TRUE(teacherFake.enrollStudentInClass("T100", "S100", 2));
+  ASSERT_TRUE(schoolFake.transferStudentSchool("S100", "South High"));
+  EXPECT_EQ(store.students["S100"].getSchool().getName(), "South High");
 
-TEST_F(AutoAssignmentFakesSuite, SchoolSaveReadUpdateRemove) {
-  AA::School s =
-      makeSchool("Oakridge High", "100 Oak St, Springfield", "PowerSchool");
+  // Fails when schoolName does not match the student's current school.
+  EXPECT_FALSE(
+      schoolFake.removeStudentFromSchoolCompletely("S100", "North High"));
+  ASSERT_TRUE(
+      schoolFake.removeStudentFromSchoolCompletely("S100", "South High"));
 
-  EXPECT_EQ(schoolStore.getTableName(), "schools");
-  EXPECT_TRUE(schoolStore.save(s));
-  EXPECT_FALSE(schoolStore.save(s));  // Duplicate school name rejected
-
-  AA::School loaded;
-  ASSERT_TRUE(schoolStore.read("name", "Oakridge High", loaded));
-  EXPECT_EQ(loaded.getName(), "Oakridge High");
-  EXPECT_EQ(loaded.getAddress(), "100 Oak St, Springfield");
-
-  AA::School updated =
-      makeSchool("Oakridge High", "200 Maple Ave, Springfield", "Canvas");
-  EXPECT_TRUE(schoolStore.update(updated, "name", "Oakridge High"));
-
-  AA::School reloaded;
-  ASSERT_TRUE(schoolStore.read("name", "Oakridge High", reloaded));
-  EXPECT_EQ(reloaded.getAddress(), "200 Maple Ave, Springfield");
-  EXPECT_EQ(reloaded.getGradebook(), "Canvas");
-
-  EXPECT_TRUE(schoolStore.remove("name", "Oakridge High"));
-  AA::School missing;
-  EXPECT_FALSE(schoolStore.read("name", "Oakridge High", missing));
+  EXPECT_EQ(store.students.find("S100"), store.students.end());
+  std::vector<std::tuple<std::string, unsigned int>> schedule;
+  ASSERT_TRUE(studentFake.loadStudentSchedule("S100", schedule));
+  EXPECT_TRUE(schedule.empty());
 }
 
-// --- Teacher CRUD & Domain Operations Tests ---
-
-TEST_F(AutoAssignmentFakesSuite, TeacherSaveReadUpdateRemove) {
-  AA::Teacher t = makeTeacher("TCH_001", "Ada", "Lovelace", "ada@oakridge.edu",
-                              "Oakridge High");
-
-  EXPECT_EQ(teacherStore.getTableName(), "teachers");
-  EXPECT_TRUE(teacherStore.save(t));
-  EXPECT_FALSE(teacherStore.save(t));  // Duplicate teacher_id rejected
-
-  AA::Teacher loaded;
-  ASSERT_TRUE(teacherStore.read("teacher_id", "TCH_001", loaded));
-  EXPECT_EQ(loaded.getTeacherID(), "TCH_001");
-  EXPECT_EQ(loaded.getEmailAddr(), "ada@oakridge.edu");
-
-  AA::Teacher updated = makeTeacher("TCH_001", "Ada", "Byron",
-                                    "ada.byron@oakridge.edu", "Oakridge High");
-  EXPECT_TRUE(teacherStore.update(updated, "teacher_id", "TCH_001"));
-
-  AA::Teacher reloaded;
-  ASSERT_TRUE(teacherStore.read("teacher_id", "TCH_001", reloaded));
-  EXPECT_EQ(reloaded.getLName(), "Byron");
-  EXPECT_EQ(reloaded.getEmailAddr(), "ada.byron@oakridge.edu");
-
-  EXPECT_TRUE(teacherStore.remove("teacher_id", "TCH_001"));
-  AA::Teacher missing;
-  EXPECT_FALSE(teacherStore.read("teacher_id", "TCH_001", missing));
-}
-
-TEST_F(AutoAssignmentFakesSuite, TeacherCredentialsAndRosterWorkflow) {
-  EXPECT_FALSE(teacherStore.saveCredentials("", "salt", "hash"));
-  EXPECT_TRUE(
-      teacherStore.saveCredentials("TCH_001", "random_salt", "hashed_pw"));
-
+TEST_F(FakesSuiteTest, ManagesRosterAndCredentials) {
+  EXPECT_TRUE(teacherFake.saveCredentials("T100", "salt123", "hash456"));
   std::string salt;
   std::string password;
-  ASSERT_TRUE(teacherStore.loadCredentials("TCH_001", salt, password));
-  EXPECT_EQ(salt, "random_salt");
-  EXPECT_EQ(password, "hashed_pw");
+  ASSERT_TRUE(teacherFake.loadCredentials("T100", salt, password));
+  EXPECT_EQ(salt, "salt123");
+  EXPECT_EQ(password, "hash456");
 
-  EXPECT_FALSE(teacherStore.loadCredentials("UNKNOWN_ID", salt, password));
+  const std::vector<std::pair<std::string, unsigned int>> pairs = {{"S100", 2},
+                                                                   {"S101", 4}};
+  ASSERT_TRUE(teacherFake.saveTeacherRoster("T100", pairs));
 
-  const std::vector<AA::Data::Fakes::teacher::RosterEntry> roster = {
-      {"STU_10", 1u}, {"STU_11", 1u}, {"STU_12", 3u}};
-  EXPECT_FALSE(teacherStore.saveTeacherRoster("", roster));
-  EXPECT_TRUE(teacherStore.saveTeacherRoster("TCH_001", roster));
+  std::vector<std::string> period2Ids;
+  ASSERT_TRUE(teacherFake.loadRosterForPeriod("T100", 2, period2Ids));
+  ASSERT_EQ(period2Ids.size(), 1U);
+  EXPECT_EQ(period2Ids[0], "S100");
 
-  std::vector<AA::Data::Fakes::teacher::RosterEntry> loadedRoster;
-  ASSERT_TRUE(teacherStore.loadTeacherRoster("TCH_001", loadedRoster));
-  ASSERT_EQ(loadedRoster.size(), 3u);
-  EXPECT_EQ(loadedRoster[0], std::make_pair(std::string("STU_10"), 1u));
-  EXPECT_EQ(loadedRoster[2], std::make_pair(std::string("STU_12"), 3u));
+  ASSERT_TRUE(teacherFake.removeStudentFromClass("T100", "S100", 2));
+  std::vector<std::tuple<std::string, unsigned int>> s100Schedule;
+  ASSERT_TRUE(studentFake.loadStudentSchedule("S100", s100Schedule));
+  EXPECT_TRUE(s100Schedule.empty());
+
+  AA::Teacher foundTeacher;
+  ASSERT_TRUE(
+      teacherFake.loadTeacherByEmail("ghopper@north.edu", foundTeacher));
+  EXPECT_EQ(foundTeacher.getTeacherID(), "T100");
+
+  AA::Student foundStudent;
+  ASSERT_TRUE(
+      studentFake.loadStudentByEmail("alovelace@north.edu", foundStudent));
+  EXPECT_EQ(foundStudent.getStudentID(), "S101");
 }
 
-TEST_F(AutoAssignmentFakesSuite, TeacherSeededTestsAndOpenTestAssignments) {
-  AA::Test test1;
-  test1.setTestID("TST_101");
-  test1.setTestName("Algebra Quiz 1");
+TEST_F(FakesSuiteTest, AssignsAndReturnsStudentTestSeparatelyFromGradeRecord) {
+  AA::Teacher quizTeacher;
+  quizTeacher.setTeacherID("T100");
 
-  AA::Test test2;
-  test2.setTestID("TST_102");
-  test2.setTestName("Polynomials Midterm");
+  AA::Test quiz;
+  quiz.setTestID("TEST_01");
+  quiz.setTeacher(quizTeacher);
+  quiz.setTestName("Logic Quiz");
 
-  teacherStore.seedTests("TCH_001", {test1, test2});
+  AA::QandA q1;
+  q1.setQuestion("2 + 2?");
+  q1.setAnswer("4");
+  store.tests["TEST_01"] = quiz;
+  store.testQuestions["TEST_01"] = {q1};
 
-  std::vector<AA::Test> tests;
-  ASSERT_TRUE(teacherStore.loadTestsForTeacher("TCH_001", tests));
-  ASSERT_EQ(tests.size(), 2u);
-  EXPECT_EQ(tests[0].getTestID(), "TST_101");
-  EXPECT_EQ(tests[1].getTestName(), "Polynomials Midterm");
+  AA::Test loadedQuiz;
+  ASSERT_TRUE(testFake.loadTestWithQuestions("TEST_01", loadedQuiz));
+  EXPECT_EQ(loadedQuiz.getTestID(), "TEST_01");
+  ASSERT_EQ(loadedQuiz.getTest().size(), 1U);
+  EXPECT_EQ(loadedQuiz.getTest()[0].getAnswer(), "4");
 
-  EXPECT_FALSE(teacherStore.loadTestsForTeacher("TCH_999", tests));
+  std::vector<AA::Test> teacherTests;
+  ASSERT_TRUE(teacherFake.loadTestsForTeacher("T100", teacherTests));
+  ASSERT_EQ(teacherTests.size(), 1U);
+  EXPECT_EQ(teacherTests[0].getTestID(), "TEST_01");
 
-  AA::OpenTest openTest;
-  openTest.setTestID("TST_101");
-  teacherStore.seedOpenTests("TCH_001", {openTest});
+  AA::OpenTest ot;
+  ot.setID(42);
+  ot.setTestID("TEST_01");
+  ot.setTeacherID("T100");
+  ot.setCreationDate(DT::Date("2026-11-18 09:00:00"));
+  ot.setDueDate(DT::Date("2026-11-25 23:59:00"));
+  ot.setDuration(60);
+  ot.setStatus("Open");
+  store.openTestsByTeacher["T100"].push_back(ot);
 
-  std::vector<AA::OpenTest> openTests;
-  ASSERT_TRUE(teacherStore.loadOpenTestsForTeacher("TCH_001", openTests));
-  ASSERT_EQ(openTests.size(), 1u);
-  EXPECT_EQ(openTests[0].getTestID(), "TST_101");
+  std::vector<AA::OpenTest> teacherOpenTests;
+  ASSERT_TRUE(teacherFake.loadOpenTestsForTeacher("T100", teacherOpenTests));
+  ASSERT_EQ(teacherOpenTests.size(), 1U);
+  EXPECT_EQ(teacherOpenTests[0].getID(), 42);
 
-  // Invalid inputs should fail cleanly
-  EXPECT_FALSE(teacherStore.assignOpenTestToMultipleStudents({}, 50));
-  EXPECT_FALSE(teacherStore.assignOpenTestToMultipleStudents({"STU_10"}, 0));
+  ASSERT_TRUE(
+      teacherFake.assignOpenTestToMultipleStudents({"S100", "S101"}, 42));
 
-  // Valid assignment
-  EXPECT_TRUE(
-      teacherStore.assignOpenTestToMultipleStudents({"STU_10", "STU_11"}, 50));
-  const auto& assigned = teacherStore.assignedStudentsForOpenTest(50);
-  ASSERT_EQ(assigned.size(), 2u);
-  EXPECT_EQ(assigned[0], "STU_10");
-  EXPECT_EQ(assigned[1], "STU_11");
+  std::vector<AA::OpenTest> s100OpenTests;
+  ASSERT_TRUE(studentFake.loadOpenTestsForStudent("S100", s100OpenTests));
+  ASSERT_EQ(s100OpenTests.size(), 1U);
+  EXPECT_EQ(s100OpenTests[0].getID(), 42);
+
+  AA::Test submittedTest = quiz;
+  submittedTest.setTestID("TEST_01");
+
+  const DT::Date submittedDate("2026-11-18 14:30:00");
+  ASSERT_TRUE(studentFake.returnStudentTest(
+      "S100", 42, submittedDate, "Submitted", submittedTest, "Q1", 90.0f));
+
+  std::vector<AA::GradeRecord> records;
+  ASSERT_TRUE(studentFake.getStudentAssignments("S100", records));
+  ASSERT_EQ(records.size(), 1U);
+  EXPECT_EQ(records[0].getTestID(), "TEST_01");
+  EXPECT_EQ(records[0].getOpenTestID(), 42);
+  EXPECT_FLOAT_EQ(records[0].getGrade(), 90.0f);
+  EXPECT_EQ(records[0].getStatus(), "Submitted");
+
+  std::vector<AA::Test> returnedTests;
+  ASSERT_TRUE(studentFake.getReturnedTestsForStudent("S100", returnedTests));
+  ASSERT_EQ(returnedTests.size(), 1U);
+  EXPECT_EQ(returnedTests[0].getTestID(), "TEST_01");
+
+  ASSERT_TRUE(testFake.removeTestQuestions("TEST_01"));
+  std::vector<AA::QandA> remainingQuestions;
+  ASSERT_TRUE(testFake.loadTestQuestions("TEST_01", remainingQuestions));
+  EXPECT_TRUE(remainingQuestions.empty());
+}
+
+TEST_F(FakesSuiteTest, LoadsAndUpdatesGradebooksForSchool) {
+  AA::Gradebook loaded;
+  ASSERT_TRUE(gradebookFake.loadGradeBookForSchool("North High", loaded));
+  EXPECT_EQ(loaded.getName(), "Canvas");
+
+  ASSERT_TRUE(gradebookFake.updateGradeBookForSchool(
+      "North High", store.gradebooks["PowerSchool"]));
+  ASSERT_TRUE(gradebookFake.loadGradeBookForSchool("North High", loaded));
+  EXPECT_EQ(loaded.getName(), "PowerSchool");
+
+  std::vector<std::pair<std::string, AA::Gradebook>> allGradebooks;
+  ASSERT_TRUE(gradebookFake.loadAllGradeBooks(allGradebooks));
+  ASSERT_EQ(allGradebooks.size(), 2U);
 }
 
 }  // namespace

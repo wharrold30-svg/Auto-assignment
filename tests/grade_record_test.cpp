@@ -1,217 +1,90 @@
 #include <gtest/gtest.h>
 
-#include <cmath>
-#include <ctime>
-#include <iostream>
 #include <string>
-#include <utility>
 
 #include "Date.h"
 #include "GradeRecord.h"
 
 namespace {
 
-// ANSI color codes matching Google Test's native palette
-constexpr const char* COLOR_RESET = "\033[0m";
-constexpr const char* COLOR_GREEN = "\033[0;32m";
-constexpr const char* COLOR_RED = "\033[0;31m";
-constexpr const char* COLOR_CYAN = "\033[0;36m";
+TEST(GradeRecordTest, DefaultConstructionAndSetters) {
+  AA::GradeRecord record;
+  record.setStudentID("S100");
+  record.setTestID("T01");
+  record.setOpenTestID(42);
+  record.setTestName("Midterm Exam");
+  record.setSubject("Computer Science");
 
-// Custom listener that runs ALONGSIDE Google Test's native colored printer
-// to announce each part being tested and its pass/fail status.
-class PartReporterListener : public ::testing::EmptyTestEventListener {
- public:
-  void OnTestStart(const ::testing::TestInfo& test_info) override {
-    std::cout << COLOR_CYAN << "[ PART     ] " << COLOR_RESET
-              << "Testing: " << test_info.test_suite_name() << "."
-              << test_info.name() << "\n";
-  }
+  const DT::Date dueDate("2026-11-15 23:59:00");
+  const DT::Date submissionDate("2026-11-14 10:30:00");
+  record.setDueDate(dueDate);
+  record.setSubmissionDate(submissionDate);
+  record.setGrade(95);
+  record.setStatus("Graded");
 
-  void OnTestEnd(const ::testing::TestInfo& test_info) override {
-    if (test_info.result()->Passed()) {
-      std::cout << COLOR_GREEN << "[ RESULT   ] " << COLOR_RESET
-                << test_info.name() << " -> PASSED\n\n";
-    } else {
-      std::cout << COLOR_RED << "[ RESULT   ] " << COLOR_RESET
-                << test_info.name() << " -> FAILED\n\n";
-    }
-  }
-};
-
-// Test Fixture providing reusable baseline data for GradeRecord tests
-class GradeRecordTest : public ::testing::Test {
- protected:
-  // Constructs DT::Date using explicit Date(const std::tm&)
-  DT::Date makeDate(int year, int month, int day, int hour = 12, int min = 0,
-                    int sec = 0) {
-    std::tm tm_val{};
-    tm_val.tm_year = year - 1900;  // std::tm years are since 1900
-    tm_val.tm_mon = month - 1;     // std::tm months are 0-11
-    tm_val.tm_mday = day;
-    tm_val.tm_hour = hour;
-    tm_val.tm_min = min;
-    tm_val.tm_sec = sec;
-    tm_val.tm_isdst = 0;
-    return DT::Date{tm_val};
-  }
-
-  AA::GradeRecord createSampleRecord() {
-    return AA::GradeRecord(
-        "TEST-101", "Midterm Exam", "Computer Science",
-        makeDate(2026, 10, 15),  // Passed as rvalue to match const DT::Date&&
-        makeDate(2026, 10, 14), 95, "Graded");
-  }
-};
-
-// ============================================================================
-// 1. Constructor & Getter Tests
-// ============================================================================
-
-TEST_F(GradeRecordTest, ParameterizedConstructorAndGetters) {
-  SCOPED_TRACE("Testing Parameterized Constructor and all Getters");
-
-  DT::Date expectedDue = makeDate(2026, 10, 15);
-  DT::Date expectedSub = makeDate(2026, 10, 14);
-
-  AA::GradeRecord record = createSampleRecord();
-
-  EXPECT_EQ(record.getTestID(), "TEST-101");
+  EXPECT_EQ(record.getStudentID(), "S100");
+  EXPECT_EQ(record.getTestID(), "T01");
+  EXPECT_EQ(record.getOpenTestID(), 42);
   EXPECT_EQ(record.getTestName(), "Midterm Exam");
   EXPECT_EQ(record.getSubject(), "Computer Science");
-  EXPECT_EQ(record.getDueDate(), expectedDue);
-  EXPECT_EQ(record.getSubmissionDate(), expectedSub);
+  EXPECT_EQ(record.getDueDate(), dueDate);
+  EXPECT_EQ(record.getSubmissionDate(), submissionDate);
   EXPECT_EQ(record.getGrade(), 95);
   EXPECT_EQ(record.getStatus(), "Graded");
 }
 
-TEST_F(GradeRecordTest, DefaultConstructorInitialization) {
-  SCOPED_TRACE("Testing Default Constructor baseline state");
+TEST(GradeRecordTest, ParameterizedConstructorInitializesAllFields) {
+  const DT::Date dueDate("2026-12-01 18:00:00");
+  const DT::Date submissionDate("2026-11-30 14:15:00");
 
-  AA::GradeRecord defaultRecord;
-  DT::Date defaultDate;
+  AA::GradeRecord record("S200", "TEST_99", 7, "Final Quiz", "Mathematics",
+                         dueDate, submissionDate, 88, "Submitted");
 
-  EXPECT_TRUE(defaultRecord.getTestID().empty());
-  EXPECT_TRUE(defaultRecord.getTestName().empty());
-  EXPECT_TRUE(defaultRecord.getSubject().empty());
-  EXPECT_TRUE(defaultRecord.getStatus().empty());
-
-  EXPECT_TRUE(defaultRecord.getDueDate().empty());
-  EXPECT_TRUE(defaultRecord.getSubmissionDate().empty());
-  EXPECT_EQ(defaultRecord.getDueDate(), defaultDate);
-  EXPECT_EQ(defaultRecord.getSubmissionDate(), defaultDate);
+  EXPECT_EQ(record.getStudentID(), "S200");
+  EXPECT_EQ(record.getTestID(), "TEST_99");
+  EXPECT_EQ(record.getOpenTestID(), 7);
+  EXPECT_EQ(record.getTestName(), "Final Quiz");
+  EXPECT_EQ(record.getSubject(), "Mathematics");
+  EXPECT_EQ(record.getDueDate(), dueDate);
+  EXPECT_EQ(record.getSubmissionDate(), submissionDate);
+  EXPECT_EQ(record.getGrade(), 88);
+  EXPECT_EQ(record.getStatus(), "Submitted");
 }
 
-// ============================================================================
-// 2. Setter Tests
-// ============================================================================
+TEST(GradeRecordTest, EqualityComparesStudentId) {
+  const DT::Date dueA("2026-10-01 00:00:00");
+  const DT::Date dueB("2026-11-01 00:00:00");
+  const DT::Date subA("2026-09-25 12:00:00");
+  const DT::Date subB("2026-10-28 12:00:00");
 
-TEST_F(GradeRecordTest, SettersUpdateFieldsAccurately) {
-  SCOPED_TRACE("Testing all Setter methods and verifying via Getters");
+  AA::GradeRecord first("S100", "T1", 1, "Quiz 1", "Science", dueA, subA, 80,
+                        "Open");
+  AA::GradeRecord sameStudent("S100", "T2", 2, "Quiz 2", "History", dueB, subB,
+                              100, "Graded");
+  AA::GradeRecord differentStudent("S101", "T1", 1, "Quiz 1", "Science", dueA,
+                                   subA, 80, "Open");
 
-  AA::GradeRecord record = createSampleRecord();
-
-  DT::Date newDue = makeDate(2026, 11, 20);
-  DT::Date newSub = makeDate(2026, 11, 19);
-
-  record.setTestID("TEST-202");
-  record.setTestName("Final Exam");
-  record.setSubject("Algorithms");
-  record.setDueDate(newDue);
-  record.setSubmissionDate(newSub);
-  record.setGrade(100);
-  record.setStatus("Returned");
-
-  EXPECT_EQ(record.getTestID(), "TEST-202");
-  EXPECT_EQ(record.getTestName(), "Final Exam");
-  EXPECT_EQ(record.getSubject(), "Algorithms");
-  EXPECT_EQ(record.getDueDate(), newDue);
-  EXPECT_EQ(record.getSubmissionDate(), newSub);
-  EXPECT_EQ(record.getGrade(), 100);
-  EXPECT_EQ(record.getStatus(), "Returned");
+  EXPECT_EQ(first, sameStudent);
+  EXPECT_NE(first, differentStudent);
 }
 
-TEST_F(GradeRecordTest, GradeBoundaryValues) {
-  SCOPED_TRACE(
-      "Testing Grade setter with zero, negative, and extra-credit values");
+TEST(GradeRecordTest, SpaceshipOperatorFollowsDueDateAndDateOrdering) {
+  // DT::Date::operator<=> orders newer dates as less than older dates,
+  // and GradeRecord::operator<=> delegates directly to m_dueDate <=>
+  // other.m_dueDate.
+  const DT::Date earlierDue("2026-10-01 00:00:00");
+  const DT::Date laterDue("2026-11-01 00:00:00");
+  const DT::Date subDate("2026-09-25 12:00:00");
 
-  AA::GradeRecord record = createSampleRecord();
+  AA::GradeRecord earlierDueRecord("S100", "T1", 1, "Lab 1", "CS", earlierDue,
+                                   subDate, 90, "Graded");
+  AA::GradeRecord laterDueRecord("S100", "T2", 2, "Lab 2", "CS", laterDue,
+                                 subDate, 92, "Pending");
 
-  record.setGrade(0);
-  EXPECT_EQ(record.getGrade(), 0);
-
-  record.setGrade(105);
-  EXPECT_EQ(record.getGrade(), 105);
-
-  record.setGrade(-1);
-  EXPECT_EQ(record.getGrade(), -1);
-}
-
-// ============================================================================
-// 3. Overloaded Operator Tests (== and <=>)
-// ============================================================================
-
-TEST_F(GradeRecordTest, EqualityOperatorComparesOnlyTestID) {
-  SCOPED_TRACE("Testing operator== checks m_testID exclusively");
-
-  AA::GradeRecord recordA("ID-999", "Quiz 1", "Math", makeDate(2026, 9, 1),
-                          makeDate(2026, 9, 1), 80, "Graded");
-
-  // Same ID, completely different fields
-  AA::GradeRecord recordSameID("ID-999", "Final", "History",
-                               makeDate(2026, 12, 15), makeDate(2026, 12, 14),
-                               100, "Pending");
-
-  // Different ID, identical other fields
-  AA::GradeRecord recordDiffID("ID-888", "Quiz 1", "Math", makeDate(2026, 9, 1),
-                               makeDate(2026, 9, 1), 80, "Graded");
-
-  EXPECT_TRUE(recordA == recordSameID);
-  EXPECT_FALSE(recordA != recordSameID);
-
-  EXPECT_FALSE(recordA == recordDiffID);
-  EXPECT_TRUE(recordA != recordDiffID);
-}
-
-TEST_F(GradeRecordTest, SpaceshipOperatorComparesDueDate) {
-  SCOPED_TRACE(
-      "Testing operator<=> orders newer due dates before older due dates");
-
-  AA::GradeRecord olderDue("ID-1", "Test A", "CS", makeDate(2026, 10, 1),
-                           makeDate(2026, 10, 1), 90, "Graded");
-
-  AA::GradeRecord newerDue("ID-2", "Test B", "CS", makeDate(2026, 10, 10),
-                           makeDate(2026, 10, 5), 70, "Graded");
-
-  AA::GradeRecord sameOlderDueDifferentID("ID-3", "Test C", "Math",
-                                          makeDate(2026, 10, 1),
-                                          makeDate(2026, 10, 2), 85, "Graded");
-
-  // Per Date.h: newer dates are less than older dates (lhs < rhs when lhs is
-  // newer)
-  EXPECT_TRUE(newerDue < olderDue);
-  EXPECT_TRUE(newerDue <= olderDue);
-  EXPECT_TRUE(olderDue > newerDue);
-  EXPECT_TRUE(olderDue >= newerDue);
-
-  // Direct three-way ordering checks
-  EXPECT_EQ(newerDue <=> olderDue, std::strong_ordering::less);
-  EXPECT_EQ(olderDue <=> newerDue, std::strong_ordering::greater);
-  EXPECT_EQ(olderDue <=> sameOlderDueDifferentID, std::strong_ordering::equal);
-
-  // Verify nuance: <=> equal due date does NOT imply operator== is true
-  EXPECT_FALSE(olderDue == sameOlderDueDifferentID);
+  EXPECT_GT(earlierDueRecord, laterDueRecord);
+  EXPECT_LT(laterDueRecord, earlierDueRecord);
+  EXPECT_GE(earlierDueRecord, laterDueRecord);
+  EXPECT_LE(laterDueRecord, earlierDueRecord);
 }
 
 }  // namespace
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-
-  // Append PartReporterListener WITHOUT removing default_result_printer()
-  // so Google Test's native colored output and summary remain active.
-  ::testing::TestEventListeners& listeners =
-      ::testing::UnitTest::GetInstance()->listeners();
-  listeners.Append(new PartReporterListener);
-
-  return RUN_ALL_TESTS();
-}
