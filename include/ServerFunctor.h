@@ -5,10 +5,7 @@
 // process each request
 
 #include <netinet/in.h>
-#include <sys/resource.h>
 #include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 
 #include <functional>
 #include <memory>
@@ -26,8 +23,6 @@ class ServerFunctor {
   using ConnectPtr = std::shared_ptr<Connection::Connection>;
 
   Connection::Connection m_mainConn;
-  fd_set m_origFdset, m_fdset;
-  int m_nfd{getdtablesize()};
   sockaddr_in m_clientAddr{};
   socklen_t m_addrLen{sizeof(m_clientAddr)};
   int m_opt1{1}, m_opt2{300};
@@ -37,9 +32,7 @@ class ServerFunctor {
   std::vector<ConnectPtr> m_connectVec;
   std::queue<Connection::ConnectContainer> m_processQueue;
   std::queue<Connection::ConnectContainer> m_writeQueue;
-  std::vector<ConnectPtr>::iterator m_iter;
   std::optional<std::string> m_buffer;
-  ConnectPtr m_workerConn;
 
   std::function<void(Connection::ConnectContainer&)> m_process;
 

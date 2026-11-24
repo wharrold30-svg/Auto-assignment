@@ -292,6 +292,27 @@ TEST_F(ServerFunctorTest, AssignsClientIpOnAccept) {
   ASSERT_EQ(ipFut.wait_for(2s), std::future_status::ready);
   EXPECT_EQ(ipFut.get(), "127.0.0.1");
 }
+
+TEST_F(ServerFunctorTest, MultiMessageBurstPendingWritesFlush) {
+  std::cout << "  -> Testing: Back-to-back burst sends flush discrete framed "
+               "responses in order\n";
+  constexpr int kBurstCount = 20;
+  startServer(
+      [](Connection::ConnectContainer& c) {
+        c.setBuffer("BURST:" + c.getBuffer());
+      },
+      true);
+
+  TestClient client;
+  ASSERT_TRUE(client.connectTo(m_port));
+
+  for (int i = 0; i < kBurstCount; ++i) {
+    ASSERT_TRUE(client.sendMsg(std::format("Frame_{}", i)));
+  }
+  for (int i = 0; i < kBurstCount; ++i) {
+    EXPECT_EQ(client.recvMsg(), std::format("BURST:Frame_{}", i));
+  }
+}
 }  // namespace
 
 int main(int argc, char** argv) {
