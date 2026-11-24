@@ -7,27 +7,38 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstring>
 #include <format>
+#include <limits>
 
 int Connection::Socket::safeRead(int fd, void* buf, std::size_t count) {
-  int retval;
-  retval = read(fd, buf, count);
-  if (retval == -1) {
-    throw NetworkError{
-        std::format("read {} bytes from fd {} FAILED", count, fd)};
+  while (true) {
+    ssize_t retval = recv(fd, buf, count, 0);
+    if (retval < 0) {
+      if (errno == EINTR) continue;       // Interrupted by signal, retry
+      if (errno == ECONNRESET) return 0;  // Treat connection reset as clean EOF
+      throw NetworkError{std::format("recv {} bytes from fd {} FAILED: {}",
+                                     count, fd, std::strerror(errno))};
+    }
+    return static_cast<int>(retval);
   }
-  return retval;
 }
 
 int Connection::Socket::safeWrite(int fd, const char* buf, std::size_t count) {
-  int retval;
-  retval = write(fd, buf, count);
-  if (retval == -1) {
-    throw NetworkError{
-        std::format("write {} bytes to fd {} FAILED", count, fd)};
+  while (true) {
+    // MSG_NOSIGNAL prevents SIGPIPE from crashing the server if peer
+    // disconnected
+    ssize_t retval = send(fd, buf, count, MSG_NOSIGNAL);
+    if (retval < 0) {
+      if (errno == EINTR) continue;  // Interrupted by signal, retry
+      if (errno == EPIPE || errno == ECONNRESET)
+        return 0;  // Peer closed socket
+      throw NetworkError{std::format("send {} bytes to fd {} FAILED: {}", count,
+                                     fd, std::strerror(errno))};
+    }
+    return static_cast<int>(retval);
   }
-  return retval;
 }
 
 int Connection::Socket::readBuffer(int fd, char* buf, int count) {
@@ -105,34 +116,57 @@ void Connection::Socket::writeNetulong(const unsigned long value) {
 }
 
 std::optional<std::string> Connection::Socket::rx() {
-  unsigned long messageLength{readNetulong()};
+  // 1. Read the 4-byte length header
+  char header[sizeof(uint32_t)];
+  int headerBytes = readBuffer(m_socket, header, sizeof(uint32_t));
 
-  // 1. Guard against empty reads or maliciously huge lengths
-  constexpr unsigned long MAX_MESSAGE_SIZE = 10 * 1024 * 1024;  // e.g., 10 MB
-  if (messageLength == 0 || messageLength > MAX_MESSAGE_SIZE) {
+  // Clean EOF (client disconnected before sending next message)
+  if (headerBytes == 0) {
+    return std::nullopt;
+  }
+  // Partial header (client disconnected mid-header)
+  if (headerBytes < static_cast<int>(sizeof(uint32_t))) {
     return std::nullopt;
   }
 
-  // 2. Allocate directly inside a std::string (avoids VLAs and extra copies)
+  uint32_t netLen = 0;
+  std::memcpy(&netLen, header, sizeof(netLen));
+  uint32_t messageLength = ntohl(netLen);
+
+  // 2. Guard against zero-length or oversized payloads (max 10 MB)
+  constexpr uint32_t kMaxMessageSize = 10 * 1024 * 1024;
+  if (messageLength == 0 || messageLength > kMaxMessageSize) {
+    return std::nullopt;
+  }
+
+  // 3. Read the payload directly into std::string
   std::string buffer(messageLength, '\0');
+  int bodyBytes =
+      readBuffer(m_socket, buffer.data(), static_cast<int>(messageLength));
 
-  int n = readBuffer(m_socket, buffer.data(), messageLength);
-
-  // 3. Check for disconnection or partial reads/errors
-  if (n <= 0 || static_cast<unsigned long>(n) < messageLength) {
-    return std::nullopt;
+  if (bodyBytes < static_cast<int>(messageLength)) {
+    return std::nullopt;  // Client disconnected mid-payload
   }
-
-  buffer.resize(n);
   return buffer;
 }
 
 bool Connection::Socket::sx(std::string_view str) {
-  writeNetulong(str.length());
+  if (str.size() > std::numeric_limits<uint32_t>::max()) {
+    return false;
+  }
 
-  int n = writeBuffer(m_socket, str.data(), str.length());
+  // Pack 4-byte length header + payload into one contiguous buffer (1 syscall,
+  // no Nagle delay)
+  uint32_t netLen = htonl(static_cast<uint32_t>(str.size()));
+  std::string packet;
+  packet.resize(sizeof(netLen) + str.size());
+  std::memcpy(packet.data(), &netLen, sizeof(netLen));
+  std::memcpy(packet.data() + sizeof(netLen), str.data(), str.size());
 
-  return static_cast<bool>(n);
+  int totalSize = static_cast<int>(packet.size());
+  int sent = writeBuffer(m_socket, packet.data(), totalSize);
+
+  return sent == totalSize;
 }
 
 Connection::Connection::Connection(std::string_view address,
@@ -164,8 +198,8 @@ Connection::Connection::Connection(std::string_view address,
 
 Connection::PortListener::PortListener(unsigned short port) {
   // fircefully attaching socket to the port
-  if (setsockopt(m_socket.getSocket(), SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
-                 &m_opt, sizeof(m_opt)) < 0) {
+  if (setsockopt(m_socket.getSocket(), SOL_SOCKET, SO_REUSEADDR, &m_opt,
+                 sizeof(m_opt)) < 0) {
     throw NetworkError{"setsocopt FAILD"};
   }
   m_address.sin_family = AF_INET;
@@ -180,5 +214,8 @@ Connection::PortListener::PortListener(unsigned short port) {
 }
 
 Connection::Connection Connection::PortListener::startServer() {
+  if (listen(m_socket.getSocket(), SOMAXCONN) < 0) {
+    throw NetworkError{"listen FAILED"};
+  }
   return Connection{m_socket.getSocket()};
 }

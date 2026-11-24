@@ -48,6 +48,16 @@ class Connection : public Socket {
  public:
   Connection(int socket) : Socket{socket} {}
   Connection(std::string_view address, unsigned short port);
+  Connection(const Connection&) = delete;
+  Connection& operator=(const Connection&) = delete;
+
+  Connection(Connection&& other) noexcept
+      : Socket{other.getSocket()},
+        m_isOpen{other.m_isOpen},
+        m_address{std::move(other.m_address)} {
+    other.setClosed();
+  }
+
   std::partial_ordering operator<=>(const Connection& other) const {
     return getSocket() <=> other.getSocket();
   }
