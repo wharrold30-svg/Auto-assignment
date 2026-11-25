@@ -217,5 +217,9 @@ Connection::Connection Connection::PortListener::startServer() {
   if (listen(m_socket.getSocket(), SOMAXCONN) < 0) {
     throw NetworkError{"listen FAILED"};
   }
-  return Connection{m_socket.getSocket()};
+  const int fd = m_socket.releaseSocket();
+  if (fd < 0) {
+    throw NetworkError{"Listener socket already released"};
+  }
+  return Connection{fd};
 }

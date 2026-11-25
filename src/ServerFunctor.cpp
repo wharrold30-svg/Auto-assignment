@@ -7,7 +7,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <format>
@@ -27,6 +26,11 @@ AA::ServerFunctor::ServerFunctor(
       m_maxFd{m_mainConn.getSocket()},
       m_process{std::move(process)},
       m_writeNeeded{writeNeeded} {
+  if (m_maxFd < 0 || m_maxFd >= FD_SETSIZE) {
+    throw Connection::NetworkError{
+        "Listening socket descriptor out of FD_SETSIZE range"};
+  }
+
   std::cout << std::format(
       "The \"{}\" server is active, listening on port {} \tPID: {}\n",
       serverName, port, getpid());
@@ -41,7 +45,7 @@ void AA::ServerFunctor::operator()() {
   };
 
   auto queueWrite = [&pendingWrites](const ConnectPtr& conn, std::string data) {
-    if (!conn || data.empty()) {
+    if (!conn || !conn->isOpen() || data.empty()) {
       return;
     }
     pendingWrites[conn].push(std::move(data));
@@ -54,10 +58,7 @@ void AA::ServerFunctor::operator()() {
     conn->closeSocket();
     pendingWrites.erase(conn);
 
-    auto pos = std::ranges::find(m_connectVec, conn);
-    if (pos != m_connectVec.end()) {
-      m_connectVec.erase(pos);
-    }
+    std::erase(m_connectVec, conn);
   };
 
   while (true) {
@@ -67,11 +68,32 @@ void AA::ServerFunctor::operator()() {
     FD_ZERO(&writeSet);
 
     const int listenFd = m_mainConn.getSocket();
+    if (listenFd < 0 || listenFd >= FD_SETSIZE) {
+      throw Connection::NetworkError{
+          "Listening socket descriptor out of FD_SETSIZE range"};
+    }
+
     FD_SET(listenFd, &readSet);
     m_maxFd = listenFd;
 
-    for (const auto& conn : m_connectVec) {
+    for (auto it = m_connectVec.begin(); it != m_connectVec.end();) {
+      const ConnectPtr& conn = *it;
+      if (!conn || !conn->isOpen()) {
+        pendingWrites.erase(conn);
+        it = m_connectVec.erase(it);
+        continue;
+      }
+
       const int fd = conn->getSocket();
+      if (fd < 0 || fd >= FD_SETSIZE) {
+        AA::SaveErrorLog(std::format(
+            "Client fd {} out of FD_SETSIZE range; closing connection", fd));
+        conn->closeSocket();
+        pendingWrites.erase(conn);
+        it = m_connectVec.erase(it);
+        continue;
+      }
+
       FD_SET(fd, &readSet);
       if (fd > m_maxFd) {
         m_maxFd = fd;
@@ -79,6 +101,7 @@ void AA::ServerFunctor::operator()() {
       if (hasPendingWrite(conn)) {
         FD_SET(fd, &writeSet);
       }
+      ++it;
     }
 
     const int ready =
@@ -97,31 +120,55 @@ void AA::ServerFunctor::operator()() {
       const int clientFd = accept(
           listenFd, reinterpret_cast<sockaddr*>(&m_clientAddr), &m_addrLen);
 
-      if (clientFd >= FD_SETSIZE) {
-        close(clientFd);
-        continue;
-      }
-
       if (clientFd >= 0) {
-        auto workerConn = std::make_shared<Connection::Connection>(clientFd);
-        if (setsockopt(static_cast<int>(*workerConn), SOL_SOCKET, SO_KEEPALIVE,
-                       reinterpret_cast<const char*>(&m_opt1),
-                       sizeof(int)) < 0) {
-          throw Connection::NetworkError{"SO_KEEPALIVE FAILED"};
+        if (clientFd >= FD_SETSIZE) {
+          AA::SaveErrorLog(
+              std::format("Accepted fd {} exceeds FD_SETSIZE ({}); closing",
+                          clientFd, FD_SETSIZE));
+          ::close(clientFd);
+        } else {
+          auto workerConn = std::make_shared<Connection::Connection>(clientFd);
+          bool sockOptOk = true;
+
+          if (setsockopt(workerConn->getSocket(), SOL_SOCKET, SO_KEEPALIVE,
+                         reinterpret_cast<const char*>(&m_opt1),
+                         sizeof(int)) < 0) {
+            AA::SaveErrorLog(std::string("SO_KEEPALIVE failed: ") +
+                             std::strerror(errno));
+            sockOptOk = false;
+          }
+
+          if (sockOptOk &&
+              setsockopt(workerConn->getSocket(), IPPROTO_TCP, TCP_KEEPIDLE,
+                         reinterpret_cast<const char*>(&m_opt2),
+                         sizeof(int)) < 0) {
+            AA::SaveErrorLog(std::string("TCP_KEEPIDLE failed: ") +
+                             std::strerror(errno));
+            sockOptOk = false;
+          }
+
+          if (!sockOptOk) {
+            workerConn->closeSocket();
+          } else {
+            workerConn->setAddr(inet_ntoa(m_clientAddr.sin_addr));
+            m_connectVec.push_back(std::move(workerConn));
+          }
         }
-        if (setsockopt(workerConn->getSocket(), IPPROTO_TCP, TCP_KEEPIDLE,
-                       reinterpret_cast<const char*>(&m_opt2),
-                       sizeof(int)) < 0) {
-          throw Connection::NetworkError{"TCP_KEEPIDLE FAILED"};
-        }
-        workerConn->setAddr(inet_ntoa(m_clientAddr.sin_addr));
-        m_connectVec.push_back(std::move(workerConn));
+      } else if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
+        AA::SaveErrorLog(std::string("accept() failed: ") +
+                         std::strerror(errno));
       }
     }
 
     // 2. Read phase -> enqueue incoming messages
     for (auto it = m_connectVec.begin(); it != m_connectVec.end();) {
       ConnectPtr conn = *it;
+      if (!conn || !conn->isOpen()) {
+        pendingWrites.erase(conn);
+        it = m_connectVec.erase(it);
+        continue;
+      }
+
       const int fd = conn->getSocket();
       if (FD_ISSET(fd, &readSet)) {
         m_buffer = conn->rx();
@@ -138,43 +185,47 @@ void AA::ServerFunctor::operator()() {
 
     // 3. Process queue -> run request processor and queue outbound frames
     while (!m_processQueue.empty()) {
-      Connection::ConnectContainer temp{std::move(m_processQueue.front())};
-      m_processQueue.pop();
+      Connection::ConnectContainer& current = m_processQueue.front();
+      ConnectPtr conn = current.getConn();
 
-      if (temp.getBuffer() == "exit") {
-        dropConnection(temp.getConn());
-      } else {
-        m_process(temp);
+      if (conn && conn->isOpen()) {
+        m_process(current);
         if (m_writeNeeded) {
-          queueWrite(temp.getConn(), temp.getBuffer());
+          queueWrite(conn, current.getBuffer());
         }
       }
+
+      m_processQueue.pop();
     }
 
-    // 4. Write phase -> flush discrete queued messages when socket is writable
+    // 4. Write phase -> send one queued message per ready socket per tick
     for (auto it = m_connectVec.begin(); it != m_connectVec.end();) {
-      ConnectPtr conn = *it;
-      const int fd = conn->getSocket();
+      const ConnectPtr& conn = *it;
+      const int fd = conn ? conn->getSocket() : -1;
+      if (!conn || !conn->isOpen() || fd < 0 || fd >= FD_SETSIZE) {
+        if (fd >= FD_SETSIZE) {
+          AA::SaveErrorLog(std::format(
+              "Client fd {} out of FD_SETSIZE range; closing connection", fd));
+        }
+        if (conn) {
+          conn->closeSocket();
+        }
+        pendingWrites.erase(conn);
+        it = m_connectVec.erase(it);
+        continue;
+      }
 
-      if (FD_ISSET(fd, &writeSet)) {
-        if (auto writeIt = pendingWrites.find(conn);
-            writeIt != pendingWrites.end() && !writeIt->second.empty()) {
-          bool sendFailed = false;
-          while (!writeIt->second.empty()) {
-            if (!conn->sx(writeIt->second.front())) {
-              sendFailed = true;
-              break;
-            }
-            writeIt->second.pop();
-          }
-
-          pendingWrites.erase(writeIt);
-
-          if (sendFailed) {
-            conn->closeSocket();
-            it = m_connectVec.erase(it);
-            continue;
-          }
+      if (FD_ISSET(fd, &writeSet) && hasPendingWrite(conn)) {
+        auto& q = pendingWrites[conn];
+        if (!conn->sx(q.front())) {
+          conn->closeSocket();
+          pendingWrites.erase(conn);
+          it = m_connectVec.erase(it);
+          continue;
+        }
+        q.pop();
+        if (q.empty()) {
+          pendingWrites.erase(conn);
         }
       }
       ++it;

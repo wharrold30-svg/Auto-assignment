@@ -33,3 +33,21 @@ jobs:
       run: |
         docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env bash -c "make clean && make run_all DEBUG=1"
 
+    #6. setup database for unit tests
+    - name: Start MariaDB and provision test database
+  env:
+    TEST_DB_PASS: ${{ secrets.AA_TEST_DB_PASSWORD }}
+  run: |
+    sudo service mariadb start
+    sudo mariadb -u root <<SQL
+    CREATE DATABASE IF NOT EXISTS auto_assignment_test;
+    CREATE USER IF NOT EXISTS 'aa_test'@'127.0.0.1' IDENTIFIED BY '${TEST_DB_PASS}';
+    CREATE USER IF NOT EXISTS 'aa_test'@'localhost' IDENTIFIED BY '${TEST_DB_PASS}';
+    GRANT ALL PRIVILEGES ON auto_assignment_test.* TO 'aa_test'@'127.0.0.1';
+    GRANT ALL PRIVILEGES ON auto_assignment_test.* TO 'aa_test'@'localhost';
+    FLUSH PRIVILEGES;
+    SQL
+    mkdir -p creds
+    printf "SERVER=127.0.0.1,USER=aa_test,PASSWORD=%s,DATABASE=auto_assignment_test\n" "${TEST_DB_PASS}" > creds/dbcreds.txt
+    chmod 600 creds/dbcreds.txt
+

@@ -3,6 +3,7 @@
 #include <mysql++/mysql++.h>
 
 #include "Date.h"
+#include "Log.h"
 #include "OpenTest.h"
 
 bool AA::Data::test::saveOpenTest(const AA::OpenTest& openTest) {
@@ -34,7 +35,7 @@ bool AA::Data::test::saveOpenTest(const AA::OpenTest& openTest) {
 
 bool AA::Data::test::loadOpenTestsByDateRange(
     const DT::Date& startDate, const DT::Date& endDate,
-    std::vector<AA::OpenTest>& out_tests) {
+    std::vector<AA::OpenTest>& out_tests) const {
   if (!m_conn.connected()) return false;
 
   out_tests.clear();
@@ -77,8 +78,8 @@ bool AA::Data::test::loadOpenTestsByDateRange(
 }
 
 // this allow getting only so many test at a time
-bool AA::Data::test::loadTestsPaginated(int limit, int offset,
-                                        std::vector<AA::Test>& out_tests) {
+bool AA::Data::test::loadTestsPaginated(
+    int limit, int offset, std::vector<AA::Test>& out_tests) const {
   out_tests.clear();
 
   if (!m_conn.connected()) {
@@ -288,6 +289,37 @@ bool AA::Data::test::loadTestWithQuestions(const std::string& testId,
     return true;
   } catch (const mysqlpp::Exception& e) {
     AA::SaveErrorLog(std::string("Exception loading test with questions: ") +
+                     e.what());
+    return false;
+  }
+}
+
+bool AA::Data::test::saveTestQuestions(const std::string& testId,
+                                       const TestVec& questions) {
+  if (!m_conn.connected() || testId.empty()) {
+    return false;
+  }
+
+  mysqlpp::Transaction trans(m_conn);
+  try {
+    mysqlpp::Query delQuery = m_conn.query();
+    delQuery << "DELETE FROM test_questions WHERE test_id = " << mysqlpp::quote
+             << testId;
+    if (!delQuery.execute()) {
+      AA::SaveErrorLog(
+          std::string("Failed clearing existing test questions: ") +
+          delQuery.error());
+      return false;
+    }
+
+    if (!insertTestQuestions(m_conn, testId, questions)) {
+      return false;
+    }
+
+    trans.commit();
+    return true;
+  } catch (const mysqlpp::Exception& e) {
+    AA::SaveErrorLog(std::string("Exception saving test questions: ") +
                      e.what());
     return false;
   }

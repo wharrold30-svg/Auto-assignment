@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Gradebook.h"
+#include "Log.h"
 #include "School.h"
 
 namespace {

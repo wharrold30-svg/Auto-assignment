@@ -1,6 +1,7 @@
 #include "Test.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <memory>
@@ -219,7 +220,7 @@ std::ostream& operator<<(std::ostream& os, const AA::Test& test) {
 
   const auto foundStudents{test.getStudents()};
   if (!foundStudents) {
-    os << test.getTestName() << " has no students/n";
+    os << test.getTestName() << " has no students\n";
     return os;
   }
 
@@ -272,7 +273,7 @@ std::string AA::Test::generateID() {
 
   // Resize the string down to the actual number of characters written
   static const char alphanum[] =
-      "01234567890"
+      "0123456789"
       "abcdefghijklmnopqrstuvexyz"
       "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const int strLen{std::size(alphanum) - 1};

@@ -419,3 +419,146 @@ void testBridgeExample(mysqlpp::Connection& conn) {
   testBridge.removeTestQuestions("TEST_01");
 }
 
+///////////////////////////////////////////////
+
+## Server Setup & Request Pipeline (`main.cpp`)
+
+Requests flow from the socket event loop into domain handlers and back out as JSON responses through five layers:
+
+1. **`ServerFunctor`** — Runs the `select()` socket loop, accepts connections, reads incoming frames via `Connection::rx()`, wraps each message in a `Connection::ConnectContainer(msg, conn)`, dispatches `m_process(container)`, and flushes replies via `Connection::sx()` when `writeNeeded` is `true`.
+2. **`ContainerBridge`** — Adapts `RequestProcessor` to `std::function<void(Connection::ConnectContainer&)>`, reading `container.getBuffer()` and replacing it with the serialized JSON response via `container.setBuffer(reply)`.
+3. **`RequestProcessor`** — Parses raw JSON (`nlohmann::json::parse`), catches parse/runtime errors into structured JSON error payloads, invokes `HandlerFactory::newHandler(std::move(req), pool)` and `handler->execute()`, and returns `response.dump()`.
+4. **`HandlerFactory::newHandler`** — Validates `"data"` and `"action"` on the request object and constructs the matching concrete handler (`TestHandler`, `TeacherHandler`, `StudentHandler`, `SchoolHandler`, `GradebookHandler`).
+5. **`Handler::execute()` & `ConnectionPool`** — Validates payload/action fields, acquires a connection from `AA::Data::ConnectionPool` for the execution scope, runs `executeImpl(...)` against the database repositories, and returns a JSON status/result or error object.
+
+### Example `main.cpp` Wiring
+
+```cpp
+#include <mysql++/mysql++.h>
+
+#include <csignal>
+
+#include "ContainerBridge.h"
+#include "ServerFunctor.h"
+#include "sql/ConnectionPool.h"
+
+int main() {
+  // Prevent broken client sockets from raising SIGPIPE and terminating the process.
+  std::signal(SIGPIPE, SIG_IGN);
+
+  // Initialize MySQL++ per-thread state before creating/using pooled connections.
+  mysqlpp::Connection::thread_start();
+
+  AA::Data::ConnectionPool pool{/* ... credentials / pool arguments ... */};
+  AA::Server::ContainerBridge bridge{pool};
+
+  AA::ServerFunctor server(
+      /*port=*/8080,
+      /*serverName=*/"AutoAssignmentServer",
+      /*process=*/bridge.asCallback(),
+      /*writeNeeded=*/true);
+
+  server();
+
+  mysqlpp::Connection::thread_end();
+  return 0;
+}
+```
+
+### Key Checklist When Wiring or Extending
+
+* **Keep `writeNeeded = true` with `ContainerBridge`:** `ContainerBridge` stores the JSON response back into `ConnectContainer` via `setBuffer(reply)` so `ServerFunctor` queues and sends it over `conn->sx(...)`.
+* **Match `Handler` and `HandlerFactory` constructors:** Concrete handlers inherit `Handler(nlohmann::json request, AA::Data::ConnectionPool& pool)` via `using Handler::Handler;`.
+* **MySQL++ thread lifecycle:** Call `mysqlpp::Connection::thread_start()` when a thread starts using `ConnectionPool` and `mysqlpp::Connection::thread_end()` before that thread exits.
+
+---
+
+## JSON Wire Contract (Requests & Responses)
+
+Incoming messages read by `Connection::rx()` must be JSON objects containing `"data"` (the target entity) and `"action"` (the operation name), with an optional `"payload"` object for action parameters.
+
+* **`data`** (`string`, required): Entity routed by `HandlerFactory::newHandler` — `"student"`, `"teacher"`, `"test"`, `"school"`, or `"gradebook"`.
+* **`action`** (`string`, required): Operation dispatched in `Handler::executeImpl` (e.g., `"create"`, `"get"`, `"update"`, `"delete"`, `"getAll"`).
+* **`payload`** (`object`, optional): Action-specific fields (defaults to an empty object `{}` if omitted or `null`).
+
+### Example 1: Creating a `teacher`
+
+**Request:**
+
+```json
+{
+  "data": "teacher",
+  "action": "create",
+  "payload": {
+    "firstName": "Grace",
+    "lastName": "Hopper",
+    "email": "ghopper@school.edu",
+    "department": "Computer Science",
+    "schoolId": 101
+  }
+}
+```
+
+**Success Response:**
+
+```json
+{
+  "status": "ok",
+  "data": "teacher",
+  "action": "create",
+  "result": {
+    "id": 7,
+    "firstName": "Grace",
+    "lastName": "Hopper",
+    "email": "ghopper@school.edu",
+    "department": "Computer Science",
+    "schoolId": 101
+  }
+}
+```
+
+### Example 2: Fetching a `student`
+
+**Request:**
+
+```json
+{
+  "data": "student",
+  "action": "get",
+  "payload": {
+    "id": 42
+  }
+}
+```
+
+**Success Response:**
+
+```json
+{
+  "status": "ok",
+  "data": "student",
+  "action": "get",
+  "result": {
+    "id": 42,
+    "firstName": "Ada",
+    "lastName": "Lovelace",
+    "email": "alovelace@school.edu",
+    "gradeLevel": 11,
+    "schoolId": 101
+  }
+}
+```
+
+### Example 3: Error Response (`student` Missing Required Field)
+
+Malformed JSON, invalid routing fields, missing payload keys, or database/runtime exceptions are caught at the `RequestProcessor` or `Handler::execute()` boundary and returned as a structured JSON error:
+
+```json
+{
+  "status": "error",
+  "data": "student",
+  "action": "get",
+  "message": "Missing required field: id"
+}
+```
+

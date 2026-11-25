@@ -11,27 +11,27 @@
 #include "Test.h"
 #include "sql/DataBase.h"
 
-namespace AA {
-namespace Data {
+namespace AA::Data {
+
 class test : public DataBase<test, AA::Test> {
  public:
-  test(mysqlpp::Connection& conn) : DataBase<test, AA::Test>{conn} {}
+  explicit test(mysqlpp::Connection& conn) : DataBase<test, AA::Test>{conn} {}
   test(const test&) = delete;
   test& operator=(const test&) = delete;
-  test(const test&&) = delete;
-  test& operator=(const test&&) = delete;
-  ~test() = default;
+  test(test&&) = delete;
+  test& operator=(test&&) = delete;
+  ~test() override = default;
 
-  virtual std::string getTableName() const override { return "tests"; }
+  std::string getTableName() const override { return "tests"; }
 
   bool saveOpenTest(const AA::OpenTest& openTest);
 
   bool loadOpenTestsByDateRange(const DT::Date& startDate,
                                 const DT::Date& endDate,
-                                std::vector<AA::OpenTest>& out_tests);
+                                std::vector<AA::OpenTest>& out_tests) const;
 
   bool loadTestsPaginated(int limit, int offset,
-                          std::vector<AA::Test>& out_tests);
+                          std::vector<AA::Test>& out_tests) const;
 
   bool saveTestQuestions(const std::string& testId, const TestVec& questions);
 
@@ -44,8 +44,8 @@ class test : public DataBase<test, AA::Test> {
 
   bool loadTestWithQuestions(const std::string& testId,
                              AA::Test& out_test) const;
+};  // class test
 
-};  // test
-}  // namespace Data
-}  // namespace AA
-#endif
+}  // namespace AA::Data
+
+#endif  // SQL_TEST_H

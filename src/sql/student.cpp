@@ -3,6 +3,7 @@
 #include <string>
 
 #include "GradeRecord.h"
+#include "Log.h"
 
 bool AA::Data::student::loadStudentSchedule(
     const std::string& studentId,

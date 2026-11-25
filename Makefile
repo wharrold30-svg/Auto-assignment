@@ -15,12 +15,21 @@ TEST_LDFLAGS := $(APP_LDFLAGS) -lgtest_main -lgtest
 DEBUG ?= 0
 
 ifeq ($(DEBUG),1)
-    CXXFLAGS := $(BASE_FLAGS) -g -O0 -DDEBUG_MODE
+    CXXFLAGS  := $(BASE_FLAGS) -g -O0 -DDEBUG_MODE
+    DB_TESTS ?= 1
     BUILD_MSG := "--- BUILDING IN DEBUG MODE ---"
 else
-    CXXFLAGS := $(BASE_FLAGS) -O3
+    CXXFLAGS  := $(BASE_FLAGS) -O3
+    DB_TESTS ?= 0
     BUILD_MSG := "--- BUILDING IN RELEASE MODE ---"
 endif
+
+# Live DB Integration Tests Toggle (Default: Off; set DB_TESTS=1 for auto_assignment_test)
+
+ifeq ($(DB_TESTS),1)
+	CXXFLAGS := $(CXXFLAGS) -DAA_ENABLE_DB_INTEGRATION_TESTS
+endif
+
 
 # Directories
 SRC_DIR   := src
@@ -35,16 +44,16 @@ OBJ_DIR   := $(BUILD_DIR)/obj
 # =====================================================================
 
 # 1. Automatically find EVERY single .cpp file in src/ (including subdirs like src/sql/), libs/, etc.
-APP_SRCS      := $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/*/*.cpp)
-LIB_SRCS      := $(wildcard $(LIB_DIR)/*.cpp)
+APP_SRCS := $(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/*/*.cpp)
+LIB_SRCS := $(wildcard $(LIB_DIR)/*.cpp)
 
 # 2. Map source files into distinct subdirectories inside build/obj/
-APP_OBJS      := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(APP_SRCS))
-LIB_OBJS      := $(patsubst $(LIB_DIR)/%.cpp, $(OBJ_DIR)/libs/%.o, $(LIB_SRCS))
+APP_OBJS := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/src/%.o, $(APP_SRCS))
+LIB_OBJS := $(patsubst $(LIB_DIR)/%.cpp, $(OBJ_DIR)/libs/%.o, $(LIB_SRCS))
 
 # 3. Combine them all into a single object list for the main application
-ALL_APP_OBJS  := $(APP_OBJS) $(LIB_OBJS)
-TARGET        := $(BUILD_DIR)/app
+ALL_APP_OBJS := $(APP_OBJS) $(LIB_OBJS)
+TARGET       := $(BUILD_DIR)/app
 
 # 4. GOOGLE TEST SAFEGUARD:
 # Once created, src/main.cpp will become build/obj/src/main.o.
@@ -57,7 +66,7 @@ TEST_SRCS        := $(wildcard $(TEST_DIR)/*_test.cpp)
 TEST_EXECUTABLES := $(patsubst $(TEST_DIR)/%_test.cpp, $(BUILD_DIR)/%_test, $(TEST_SRCS))
 
 # 6. Gather all .d tracking files (Application objects + Test objects)
-ALL_DEPS         := $(ALL_APP_OBJS:.o=.d) $(TEST_SRCS:$(TEST_DIR)/%.cpp=$(OBJ_DIR)/tests/%.d)
+ALL_DEPS := $(ALL_APP_OBJS:.o=.d) $(TEST_SRCS:$(TEST_DIR)/%.cpp=$(OBJ_DIR)/tests/%.d)
 
 # =====================================================================
 # APPLICATION BUILD RULES
@@ -98,7 +107,7 @@ $(OBJ_DIR)/tests/%.o: $(TEST_DIR)/%.cpp | $(OBJ_DIR)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Links an individual test suite binary without the app's main.o (includes SQL classes automatically via TEST_SAFE_OBJS)
+# Links an individual test suite binary without the app's main.o
 $(BUILD_DIR)/%_test: $(OBJ_DIR)/tests/%_test.o $(TEST_SAFE_OBJS) | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	@echo "Linking Test Suite: $*..."
@@ -152,7 +161,7 @@ clean_test:
 # Clean everything completely
 clean:
 	@echo "Cleaning all build artifacts..."
-	rm -rf $(BUILD_DIR)
+	@rm -rf $(BUILD_DIR)
 
 .PHONY: all run clean clean_src clean_test run_all print_mode
 

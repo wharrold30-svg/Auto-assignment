@@ -323,6 +323,15 @@ class Test {
     return test;
   }
 
+  void fromSSQLS(const mysqlpp::Row& row) {
+    SSQLS::tests ssqlsRow(row);
+    Teacher defaultTeacher{};
+    *this = fromSSQLS(ssqlsRow, defaultTeacher);
+    if (!ssqlsRow.test_id.empty()) {
+      setTestID(ssqlsRow.test_id);
+    }
+  }
+
   NLOHMANN_DEFINE_TYPE_INTRUSIVE(Test, m_name, m_teacher, m_dueDate, m_sentDate,
                                  m_test, m_students, m_description, m_subject,
                                  m_level)

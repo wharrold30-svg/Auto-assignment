@@ -5,6 +5,7 @@
 #include <string>
 
 #include "Date.h"
+#include "nlohmann/json.hpp"
 namespace AA {
 class GradeRecord {
  private:
@@ -88,6 +89,9 @@ class GradeRecord {
   bool operator==(const GradeRecord& other) const {
     return m_studentID == other.m_studentID;
   }
+  NLOHMANN_DEFINE_TYPE_INTRUSIVE(GradeRecord, m_openTestID, m_grade, m_status,
+                                 m_subject, m_testID, m_testName, m_studentID,
+                                 m_dueDate, m_submissionDate)
 };  // GradeRecord
 }  // namespace AA
 #endif  // GRADE_RECORD_H

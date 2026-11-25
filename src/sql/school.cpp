@@ -1,5 +1,6 @@
 #include "sql/school.h"
 
+#include "Log.h"
 #include "School.h"
 
 bool AA::Data::school::transferStudentSchool(const std::string& studentId,

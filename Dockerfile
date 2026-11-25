@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y \
     gcc-15 \
     g++-15 \
     make \
+    mariadb-server \
+    mariadb-client \
     libcurl4-openssl-dev \
     libcrypto++-dev \
     libgtest-dev \
