@@ -48,7 +48,7 @@ jobs:
           FLUSH PRIVILEGES;
           SQL
           mkdir -p creds
-          printf "SERVER=127.0.0.1,USER=aa_test,PASSWORD=%s,DATABASE=auto_assignment_test\n" "${TEST_DB_PASS}" > creds/dbcreds.txt
+          printf "SERVER=127.0.0.1,USER=aa_test,PASSWORD=%s,DB_NAME=auto_assignment_test\n" "${TEST_DB_PASS}" > creds/dbcreds.txt
           chmod 600 creds/dbcreds.txt
           make clean && make run_all DEBUG=1
           EOF
