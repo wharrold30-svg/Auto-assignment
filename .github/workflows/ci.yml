@@ -11,43 +11,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Pull down your source code repository
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      # 1. Pull down your source code repository
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    # 2. Set up a Docker build environment
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      # 2. Set up a Docker build environment
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    # 3. Build the environment container using your Dockerfile
-    - name: Build Environment Container
-      run: docker build -t cpp23-env .
+      # 3. Build the environment container using your Dockerfile
+      - name: Build Environment Container
+        run: docker build -t cpp23-env .
 
-    # 4. FIXED: Wipes out stale .o artifacts, then compiles the main application safely
-    - name: Compile Application (Release Mode)
-      run: |
-        docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env bash -c "make clean && make all DEBUG=0"
+      # 4. Wipe stale artifacts and compile the main application in release mode
+      - name: Compile Application (Release Mode)
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env bash -c "make clean && make all DEBUG=0"
 
-    # 5. FIXED: Wipes out stale binaries, then runs your Google Test suites incrementally
-    - name: Run All Google Test Suites (Debug Mode)
-      run: |
-        docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env bash -c "make clean && make run_all DEBUG=1"
-
-    #6. setup database for unit tests
-    - name: Start MariaDB and provision test database
-  env:
-    TEST_DB_PASS: ${{ secrets.AA_TEST_DB_PASSWORD }}
-  run: |
-    sudo service mariadb start
-    sudo mariadb -u root <<SQL
-    CREATE DATABASE IF NOT EXISTS auto_assignment_test;
-    CREATE USER IF NOT EXISTS 'aa_test'@'127.0.0.1' IDENTIFIED BY '${TEST_DB_PASS}';
-    CREATE USER IF NOT EXISTS 'aa_test'@'localhost' IDENTIFIED BY '${TEST_DB_PASS}';
-    GRANT ALL PRIVILEGES ON auto_assignment_test.* TO 'aa_test'@'127.0.0.1';
-    GRANT ALL PRIVILEGES ON auto_assignment_test.* TO 'aa_test'@'localhost';
-    FLUSH PRIVILEGES;
-    SQL
-    mkdir -p creds
-    printf "SERVER=127.0.0.1,USER=aa_test,PASSWORD=%s,DATABASE=auto_assignment_test\n" "${TEST_DB_PASS}" > creds/dbcreds.txt
-    chmod 600 creds/dbcreds.txt
+      # 5. Start MariaDB, provision test DB, generate creds/dbcreds.txt, and run debug tests
+      - name: Run All Google Test Suites (Debug Mode)
+        env:
+          TEST_DB_PASS: ${{ secrets.AA_TEST_DB_PASSWORD }}
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace -e TEST_DB_PASS="${TEST_DB_PASS}" cpp23-env bash -c '
+            set -e
+            service mariadb start
+            mariadb -u root <<SQL
+            CREATE DATABASE IF NOT EXISTS auto_assignment_test;
+            CREATE USER IF NOT EXISTS '\''aa_test'\''@'\''127.0.0.1'\'' IDENTIFIED BY '\''${TEST_DB_PASS}'\'';
+            CREATE USER IF NOT EXISTS '\''aa_test'\''@'\''localhost'\'' IDENTIFIED BY '\''${TEST_DB_PASS}'\'';
+            GRANT ALL PRIVILEGES ON auto_assignment_test.* TO '\''aa_test'\''@'\''127.0.0.1'\'';
+            GRANT ALL PRIVILEGES ON auto_assignment_test.* TO '\''aa_test'\''@'\''localhost'\'';
+            FLUSH PRIVILEGES;
+            SQL
+            mkdir -p creds
+            printf "SERVER=127.0.0.1,USER=aa_test,PASSWORD=%s,DATABASE=auto_assignment_test\n" "${TEST_DB_PASS}" > creds/dbcreds.txt
+            chmod 600 creds/dbcreds.txt
+            make clean && make run_all DEBUG=1
+          '
 
