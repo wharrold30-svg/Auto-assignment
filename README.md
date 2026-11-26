@@ -563,28 +563,130 @@ Malformed JSON, invalid routing fields, missing payload keys, or database/runtim
 ```
 ///////////////////////////////////////////////
 
-Server Concurrency, Scaling Roadmap, and epoll Transition
-​Single-Threaded Event Loop vs. Thread-Per-Connection
-​A single-threaded I/O multiplexing loop (such as select(), poll(), or epoll) can outperform traditional thread-per-connection servers when handling many concurrent connections with fast, non-blocking request handling:
-​Zero Context-Switching Overhead: With a thread per client, the OS scheduler pauses and resumes threads, flushing CPU caches and registers, whereas a single-threaded loop stays on one core and avoids kernel context switches between user threads.
-​No Lock Contention: Because m_connectVec, m_processQueue, and pendingWrites are touched by only one thread in ServerFunctor::operator(), there is no mutex contention or cache-line bouncing across CPU cores.
-​Lower Memory Footprint: Each OS thread reserves its own stack (often 1–8 MB on Linux), whereas one event loop multiplexes many sockets with minimal memory overhead.
-​High Cache Locality: Keeping socket state, request buffers, and response queues in a tight loop keeps hot data in CPU cache.
-​The Trade-Off: This speed advantage holds while m_process(current) finishes quickly. Because ServerFunctor runs m_process(current) synchronously in its loop, slow or blocking operations inside a handler (such as heavy database queries, disk I/O, or outbound SMTP calls via libcurl) delay subsequent select() iterations for other connected clients.
-​Scaling Roadmap: Starting Small to Thousands of Concurrent Users
-​Starting small and scaling incrementally keeps early development simple while preserving a clean path toward higher concurrency:
-​1. Stage 1 — Early Users (Tens to Low Hundreds): Keep the single-threaded event loop and ConnectionPool as they are, focusing on correctness, clean error handling, and fast SQL queries.
-​2. Stage 2 — Growing Traffic (Hundreds to ~1,000+ Concurrent Connections): When select() limits become noticeable (such as FD_SETSIZE or scanning sockets every tick), replace select() inside ServerFunctor with epoll on Linux while keeping ConnectContainer, ContainerBridge, and RequestProcessor unchanged.
-​3. Stage 3 — Heavy Load / Thousands of Concurrent Users: Isolate slow or blocking work (such as SMTP email delivery or heavy report generation) from the network loop, tune ConnectionPool sizing and MariaDB connection limits against max_connections, and scale vertically or horizontally as needed.
-​Swapping select() for epoll Inside ServerFunctor
-​select() can be replaced with epoll inside ServerFunctor.cpp on Linux without changing ServerFunctor's public interface, m_process(current) callback contract, Connection::ConnectContainer, ContainerBridge, or RequestProcessor:
-​Boundary Stays at ConnectContainer&: ServerFunctor reads incoming socket data into ConnectContainer, invokes m_process(current) (ContainerBridge -> RequestProcessor), and queues the resulting response buffer back out over the socket.
-​No FD_SETSIZE Ceiling: epoll_create1(EPOLL_CLOEXEC) is not restricted by FD_SETSIZE, and epoll_wait() returns only sockets with active events rather than scanning all descriptors on every iteration.
-​Direct Connection Lookup: Storing the socket descriptor or connection identifier in epoll_event::data allows direct lookup when epoll_wait() reports readiness.
-​Transition Steps
-​1. Create and Register the epoll Instance: Open an epoll descriptor with epoll_create1(EPOLL_CLOEXEC) (and clean it up on exit), register listenFd with EPOLLIN, and register each accepted client socket with EPOLLIN (adding/modifying EPOLLOUT via epoll_ctl(..., EPOLL_CTL_MOD, ...) only when pending writes exist).
-​2. Replace select() and fd_set Loops with epoll_wait(): Use epoll_wait() (preserving EINTR handling) to:
-​Accept new client connections when listenFd has EPOLLIN and register them with epoll_ctl(..., EPOLL_CTL_ADD, ...).
-​Read via conn->rx() on client EPOLLIN, close/remove disconnected or "exit" sockets, and push ConnectContainer items onto m_processQueue.
-​Flush pending writes via conn->sx(...) on client EPOLLOUT, and use EPOLL_CTL_MOD to clear EPOLLOUT once a connection's write queue becomes empty.
-​3. Preserve m_processQueue and Socket Cleanup: Keep the m_processQueue processing step (m_process(current) -> queueWrite(...)) intact, and remove descriptors with epoll_ctl(epollFd, EPOLL_CTL_DEL, fd, nullptr) before closing sockets.
+## Server Concurrency, Scaling Roadmap, and `epoll` Transition
+
+### Single-Threaded Event Loop vs. Thread-Per-Connection
+
+A single-threaded I/O multiplexing loop (such as `select()`, `poll()`, or `epoll`) can outperform traditional thread-per-connection servers when handling many concurrent connections with fast, non-blocking request handling:
+
+* **Zero Context-Switching Overhead:** With a thread per client, the OS scheduler pauses and resumes threads, flushing CPU caches and registers, whereas a single-threaded loop stays on one core and avoids kernel context switches between user threads.
+
+* **No Lock Contention:** Because `m_connectVec`, `m_processQueue`, and `pendingWrites` are touched by only one thread in `ServerFunctor::operator()`, there is no mutex contention or cache-line bouncing across CPU cores.
+
+* **Lower Memory Footprint:** Each OS thread reserves its own stack (often 1–8 MB on Linux), whereas one event loop multiplexes many sockets with minimal memory overhead.
+
+* **High Cache Locality:** Keeping socket state, request buffers, and response queues in a tight loop keeps hot data in CPU cache.
+
+**The Trade-Off:** This speed advantage holds while `m_process(current)` finishes quickly. Because `ServerFunctor` runs `m_process(current)` synchronously in its loop, slow or blocking operations inside a handler (such as heavy database queries, disk I/O, or outbound SMTP calls via `libcurl`) delay subsequent `select()` iterations for other connected clients.
+
+---
+
+### Scaling Roadmap: Starting Small to Thousands of Concurrent Users
+
+Starting small and scaling incrementally keeps early development simple while preserving a clean path toward higher concurrency:
+
+1. **Stage 1 — Early Users (Tens to Low Hundreds):** Keep the single-threaded event loop and `ConnectionPool` as they are, focusing on correctness, clean error handling, and fast SQL queries.
+
+2. **Stage 2 — Growing Traffic (Hundreds to ~1,000+ Concurrent Connections):** When `select()` limits become noticeable (such as `FD_SETSIZE` or scanning sockets every tick), replace `select()` inside `ServerFunctor` with `epoll` on Linux while keeping `ConnectContainer`, `ContainerBridge`, and `RequestProcessor` unchanged.
+
+3. **Stage 3 — Heavy Load / Thousands of Concurrent Users:** Isolate slow or blocking work (such as SMTP email delivery or heavy report generation) from the network loop, tune `ConnectionPool` sizing and MariaDB connection limits against `max_connections`, and scale vertically or horizontally as needed.
+
+---
+
+### Swapping `select()` for `epoll` Inside `ServerFunctor`
+
+`select()` can be replaced with `epoll` inside `ServerFunctor.cpp` on Linux without changing `ServerFunctor`'s public interface, `m_process(current)` callback contract, `Connection::ConnectContainer`, `ContainerBridge`, or `RequestProcessor`:
+
+* **Boundary Stays at `ConnectContainer&`:** `ServerFunctor` reads incoming socket data into `ConnectContainer`, invokes `m_process(current)` (`ContainerBridge` -> `RequestProcessor`), and queues the resulting response buffer back out over the socket.
+
+* **No `FD_SETSIZE` Ceiling:** `epoll_create1(EPOLL_CLOEXEC)` is not restricted by `FD_SETSIZE`, and `epoll_wait()` returns only sockets with active events rather than scanning all descriptors on every iteration.
+
+* **Direct Connection Lookup:** Storing the socket descriptor or connection identifier in `epoll_event::data` allows direct lookup when `epoll_wait()` reports readiness.
+
+#### Transition Steps
+
+1. **Create and Register the `epoll` Instance:** Open an `epoll` descriptor with `epoll_create1(EPOLL_CLOEXEC)` (and clean it up on exit), register `listenFd` with `EPOLLIN`, and register each accepted client socket with `EPOLLIN` (adding/modifying `EPOLLOUT` via `epoll_ctl(..., EPOLL_CTL_MOD, ...)` only when pending writes exist).
+
+2. **Replace `select()` and `fd_set` Loops with `epoll_wait()`:** Use `epoll_wait()` (preserving `EINTR` handling) to:
+
+   * Accept new client connections when `listenFd` has `EPOLLIN` and register them with `epoll_ctl(..., EPOLL_CTL_ADD, ...)`.
+
+   * Read via `conn->rx()` on client `EPOLLIN`, close/remove disconnected or `"exit"` sockets, and push `ConnectContainer` items onto `m_processQueue`.
+
+   * Flush pending writes via `conn->sx(...)` on client `EPOLLOUT`, and use `EPOLL_CTL_MOD` to clear `EPOLLOUT` once a connection's write queue becomes empty.
+
+3. **Preserve `m_processQueue` and Socket Cleanup:** Keep the `m_processQueue` processing step (`m_process(current)` -> `queueWrite(...)`) intact, and remove descriptors with `epoll_ctl(epollFd, EPOLL_CTL_DEL, fd, nullptr)` before closing sockets.
+
+
+
+### Server Entry Point Wiring (`src/main.cpp`)
+
+The server entry point initializes `ConnectionPool`, passes it to `RequestProcessor`, wraps `RequestProcessor` in `ContainerBridge`, and starts `ServerFunctor` with `writeNeeded = true` so serialized JSON replies are queued back to clients:
+
+```cpp
+#include <csignal>
+#include <cstdlib>
+#include <iostream>
+#include <string>
+#include <string_view>
+
+#include "ContainerBridge.h"
+#include "Log.h"
+#include "RequestProcessor.h"
+#include "ServerFunctor.h"
+#include "sql/ConnectionPool.h"
+
+namespace {
+
+constexpr unsigned short kDefaultPort = 8080;
+constexpr std::string_view kServerName = "AutoAssignmentServer";
+
+unsigned short parsePort(int argc, char* argv[]) {
+  if (argc < 2) {
+    return kDefaultPort;
+  }
+  const int parsed = std::atoi(argv[1]);
+  if (parsed <= 0 || parsed > 65535) {
+    return kDefaultPort;
+  }
+
+  return static_cast<unsigned short>(parsed);
+}
+
+}  // namespace
+
+int main(int argc, char* argv[]) {
+  // Ignore SIGPIPE so disconnecting clients do not terminate the server process
+  std::signal(SIGPIPE, SIG_IGN);
+
+  const unsigned short port = parsePort(argc, argv);
+
+  try {
+    // 1. Load DB config from creds/dbcreds.txt and create the connection pool
+    AA::Data::ConnectionPool::Config dbConfig =
+        AA::Data::ConnectionPool::loadConfigFromFile();
+    AA::Data::ConnectionPool pool{std::move(dbConfig)};
+
+    // 2. Create the JSON request processor backed by the connection pool
+    AA::Server::RequestProcessor processor{pool};
+
+    // 3. Adapt RequestProcessor (returns std::string) to ConnectContainer&
+    AA::Server::ContainerBridge bridge{processor};
+
+    // 4. Start ServerFunctor with writeNeeded=true so replies are sent back
+    AA::ServerFunctor server{port, kServerName, bridge.asCallback(),
+                           /*writeNeeded=*/true};
+    server();
+  } catch (const std::exception& ex) {
+    AA::SaveErrorLog(std::string{"Fatal server error: "} + ex.what());
+    std::cerr << "Fatal error: " << ex.what() << '\n';
+    return 1;
+  } catch (...) {
+    AA::SaveErrorLog("Fatal server error: unknown exception");
+    std::cerr << "Fatal error: unknown exception\n";
+    return 1;
+  }
+
+  return 0;
+} 
+```
