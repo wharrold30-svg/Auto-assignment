@@ -28,7 +28,7 @@ jobs:
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace cpp23-env bash -c "make clean && make all DEBUG=0"
 
-      # 5. Start MariaDB, provision test DB, generate creds/dbcreds.txt, and run debug tests
+                # 5. Start MariaDB, provision test DB, generate creds/dbcreds.txt, and run debug tests
       - name: Run All Google Test Suites (Debug Mode)
         env:
           TEST_DB_PASS: ${{ secrets.AA_TEST_DB_PASSWORD }}
